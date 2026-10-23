@@ -1,0 +1,17 @@
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+import { Maximize, QrCode, ScanLine } from "lucide-react";
+import { examService } from "@/lib/api";
+import type { PublicSession } from "@/lib/types";
+import QRCodeImage from "./qr-code";
+
+export default function ClassroomDisplay({ sessionId }: { sessionId: string }) {
+  const [session, setSession] = useState<PublicSession>();
+  const ref = useRef<HTMLElement>(null);
+  useEffect(() => { const timer = window.setTimeout(() => { void examService.getPublicSession(sessionId).then(setSession); }, 0); return () => window.clearTimeout(timer); }, [sessionId]);
+  const fullscreen = () => { if (document.fullscreenElement) void document.exitFullscreen(); else void ref.current?.requestFullscreen(); };
+  if (!session) return <main className="flex min-h-screen items-center justify-center bg-[#17212b] text-white"><p className="sans text-sm">Loading classroom display…</p></main>;
+  const url = `${window.location.origin}/session/${sessionId}`;
+  return <main ref={ref} className="relative flex min-h-screen flex-col overflow-hidden bg-[#17212b] text-white"><div className="absolute inset-0 opacity-20" style={{ backgroundImage: "linear-gradient(rgba(255,255,255,.08) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.08) 1px, transparent 1px)", backgroundSize: "42px 42px" }} /><header className="relative flex items-center justify-between px-8 py-6 sm:px-12"><div className="flex items-center gap-3"><div className="flex h-9 w-9 items-center justify-center bg-[var(--orange)]"><QrCode size={21} /></div><span className="sans text-xs font-bold uppercase tracking-[.2em]">Phosub · classroom mode</span></div><button onClick={fullscreen} className="flex items-center gap-2 rounded border border-white/25 px-3 py-2 sans text-xs font-bold"><Maximize size={15} /> Fullscreen</button></header><div className="relative flex flex-1 flex-col items-center justify-center px-6 pb-14 text-center"><p className="sans text-sm font-bold uppercase tracking-[.22em] text-[#a8cbe1]">{session.exam.className}</p><h1 className="mt-4 max-w-4xl text-4xl font-bold tracking-tight sm:text-6xl">{session.exam.title}</h1><div className="mt-10 flex flex-col items-center gap-8 sm:flex-row sm:gap-12"><div className="bg-white p-5 sm:p-7"><QRCodeImage value={url} size={260} /></div><div className="max-w-xs text-left"><div className="flex items-center gap-2 text-[var(--orange)]"><ScanLine size={21} /><p className="sans text-sm font-bold uppercase tracking-wider">Join the exam</p></div><p className="mt-3 text-2xl font-bold leading-tight">Scan the code, complete the form, and submit.</p><p className="mt-5 sans text-sm leading-6 text-[#c3d0d7]">One submission per student. Keep your reference number after submitting.</p><div className="mt-7 border-t border-white/15 pt-5 sans text-sm"><p className="text-[#a8b8c2]">Submission deadline</p><p className="mt-1 text-xl font-bold">{new Date(session.exam.endTime).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</p></div></div></div></div><footer className="relative flex flex-wrap items-center justify-between gap-3 border-t border-white/15 px-8 py-5 sans text-sm sm:px-12"><span className="text-[#a8b8c2]">Current submissions</span><strong className="text-2xl">34 <span className="text-base font-normal text-[#a8b8c2]">of 50</span></strong></footer></main>;
+}
