@@ -7,6 +7,8 @@ export const examSchema = z.object({
   startTime: z.string().min(1, "Choose a start time"),
   endTime: z.string().min(1, "Choose an end time"),
   studentIdRequired: z.boolean(),
+}).superRefine((data, context) => {
+  if (new Date(data.endTime).getTime() <= new Date(data.startTime).getTime()) context.addIssue({ code: z.ZodIssueCode.custom, path: ["endTime"], message: "End time must be after start time" });
 });
 
 export const submissionSchema = z

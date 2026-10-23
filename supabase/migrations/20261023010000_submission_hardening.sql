@@ -1,0 +1,1 @@
+create unique index if not exists submissions_exam_email_unique on public.submissions(exam_id, lower(college_email));

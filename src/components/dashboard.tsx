@@ -8,6 +8,7 @@ import type { Exam, ExamSummary, Submission } from "@/lib/types";
 import QRCodeImage from "./qr-code";
 
 const formatTime = (value?: string) => value ? new Intl.DateTimeFormat("en", { hour: "numeric", minute: "2-digit" }).format(new Date(value)) : "—";
+const getActiveExamId = () => typeof window === "undefined" ? "demo-midterm" : window.localStorage.getItem("phosub.activeExamId") ?? "demo-midterm";
 
 export default function Dashboard() {
   const [exam, setExam] = useState<Exam>();
@@ -16,24 +17,34 @@ export default function Dashboard() {
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState("all");
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
+  const [noExams, setNoExams] = useState(false);
   const [notice, setNotice] = useState("");
 
   async function load() {
     setLoading(true);
+    setLoadError("");
     try {
-      const [nextExam, results] = await Promise.all([examService.getExam("demo-midterm"), examService.getSubmissions("demo-midterm")]);
+      const exams = await examService.listExams();
+      const nextExam = exams.find((item) => item.id === getActiveExamId()) ?? exams[0];
+      if (!nextExam) { setNoExams(true); setLoadError("No exams found yet."); return; }
+      setNoExams(false);
+      window.localStorage.setItem("phosub.activeExamId", nextExam.id);
+      const results = await examService.getSubmissions(nextExam.id);
       setExam(nextExam); setSummary(results.summary); setSubmissions(results.submissions);
-    } finally { setLoading(false); }
+    } catch (error) { setLoadError(error instanceof Error ? error.message : "The dashboard could not be loaded."); } finally { setLoading(false); }
   }
   useEffect(() => { const timer = window.setTimeout(() => { void load(); }, 0); return () => window.clearTimeout(timer); }, []);
 
   const visible = submissions.filter((item) => `${item.name} ${item.studentId} ${item.email}`.toLowerCase().includes(query.toLowerCase()) && (filter === "all" || (filter === "photo-missing" ? item.photoStatus === "not_submitted" : item.formStatus === filter)));
   const stats: Array<[string, number, LucideIcon, string]> = [["Expected", summary?.expected ?? 0, Users, "text-[var(--blue)]"], ["Submitted", summary?.submitted ?? 0, Check, "text-[var(--green)]"], ["Pending", summary?.pending ?? 0, Clock3, "text-[#b86c21]"], ["Photos in", summary?.photosSubmitted ?? 0, ClipboardList, "text-[var(--blue)]"], ["Photos missing", summary?.photosMissing ?? 0, Clock3, "text-[#b9502b]"]];
   const setSessionState = async (action: "start" | "close" | "reopen") => {
-    const next = action === "start" ? await examService.startExam("demo-midterm") : action === "close" ? await examService.closeExam("demo-midterm") : await examService.reopenExam("demo-midterm");
+    const examId = getActiveExamId();
+    const next = action === "start" ? await examService.startExam(examId) : action === "close" ? await examService.closeExam(examId) : await examService.reopenExam(examId);
     setExam(next); setNotice(action === "start" ? "Session is live. The QR link is ready to display." : action === "close" ? "Session closed. New submissions are no longer accepted." : "Session reopened. Students can submit again.");
   };
 
+  if (loadError) return <main className="app-grid flex min-h-screen items-center justify-center px-5"><section className="max-w-md rounded-xl border border-[var(--line)] bg-white p-8 text-center"><h1 className="text-2xl font-bold">{noExams ? "Create your first exam" : "Dashboard unavailable"}</h1><p className="mt-3 sans text-sm leading-6 text-[var(--muted)]">{loadError}</p>{noExams ? <a href="/teacher/exams/new" className="mt-6 inline-flex rounded bg-[var(--orange)] px-4 py-3 sans text-sm font-bold text-white">Create exam</a> : <><p className="mt-5 sans text-xs leading-5 text-[var(--muted)]">Ask an administrator to provision your Supabase user in <code>teacher_profiles</code>, then try again.</p><button onClick={() => void load()} className="mt-6 rounded bg-[var(--ink)] px-4 py-3 sans text-sm font-bold text-white">Try again</button></>}</section></main>;
   if (loading || !exam || !summary) return <div className="min-h-screen bg-[#f7f9f8] p-6"><div className="mx-auto max-w-7xl animate-pulse space-y-6"><div className="h-10 w-64 rounded bg-slate-200" /><div className="grid gap-4 md:grid-cols-5">{[1, 2, 3, 4, 5].map((item) => <div className="h-28 rounded-xl bg-white" key={item} />)}</div><div className="h-96 rounded-xl bg-white" /></div></div>;
 
   return <main className="app-grid min-h-screen"><header className="border-b border-[var(--line)] bg-white/90"><div className="mx-auto flex max-w-7xl items-center justify-between px-5 py-4"><div className="flex items-center gap-3"><div className="flex h-10 w-10 items-center justify-center bg-[var(--ink)] text-white"><QrCode size={22} /></div><div><p className="sans text-[11px] font-bold uppercase tracking-[.18em] text-[var(--orange)]">Phosub</p><p className="text-lg font-bold leading-none">Exam operations</p></div></div><div className="flex items-center gap-3"><span className="hidden rounded-full bg-[#fff3ed] px-3 py-1.5 sans text-xs font-bold text-[#b9502b] sm:block">Mock adapter enabled</span><button className="focus-ring rounded border border-[var(--line)] p-2 text-[var(--muted)]" aria-label="Open menu"><Menu size={18} /></button></div></div></header>

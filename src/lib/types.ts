@@ -56,6 +56,7 @@ export interface SubmissionReceipt {
 }
 
 export interface ExamService {
+  listExams(): Promise<Exam[]>;
   createExam(input: Omit<Exam, "id" | "status" | "publicUrl">): Promise<Exam>;
   startExam(examId: string): Promise<Exam>;
   closeExam(examId: string): Promise<Exam>;

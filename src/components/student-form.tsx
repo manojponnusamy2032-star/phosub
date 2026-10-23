@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { AlertCircle, ArrowLeft, CheckCircle2, FileImage, LockKeyhole, RefreshCw, Send, Upload, X } from "lucide-react";
-import { examService } from "@/lib/api";
+import { examService, uploadPhoto } from "@/lib/api";
 import type { PublicSession, SubmissionReceipt } from "@/lib/types";
 import { submissionSchema, type SubmissionFormValues } from "@/lib/validation";
 
@@ -51,13 +51,14 @@ export default function StudentForm({ sessionId }: { sessionId: string }) {
   const onSubmit = async (values: SubmissionFormValues) => {
     setSubmitError("");
     try {
+      const photoPath = values.photoStatus === "submitted" && values.photo ? await uploadPhoto(sessionId, values.photo) : undefined;
       setReceipt(await examService.submitStudent(sessionId, {
         fullName: values.fullName,
         collegeEmail: values.collegeEmail,
         studentId: values.studentId,
         photoStatus: values.photoStatus,
         reason: values.reason,
-        photoPath: values.photo?.name,
+        photoPath,
       }));
     } catch {
       setSubmitError("Your submission could not be saved. Your answers are still here; check your connection and try again.");

@@ -1,17 +1,19 @@
 # Phosub
 
-QR-based student exam submission workflow for classroom use.
+QR-based student exam photo-submission workflow for classroom use.
 
-## Current implementation
+## What is implemented
 
-- Next.js App Router, strict TypeScript, Tailwind CSS, Lucide icons.
-- Teacher control room at `/` with status cards, searchable submission register, QR generation, classroom link, and session controls.
-- Projector-friendly display at `/classroom/demo-midterm`.
-- Mobile-first student flow at `/session/demo-midterm` with conditional photo/reason fields, client validation, preview, duplicate-submit protection, and receipt state.
-- Typed service boundary in `src/lib/api.ts`. `NEXT_PUBLIC_USE_MOCK_ADAPTER=true` is an explicit UI-development adapter and does not persist student data.
-- Live adapter calls the documented `/api` endpoints. Authentication, authorization, server-side validation, storage signing, duplicate prevention, and database persistence must be implemented by the deployed backend before switching mock mode off.
+- Next.js App Router with strict TypeScript, Tailwind CSS, accessible form controls, and Lucide icons.
+- Teacher dashboard with persisted-data API contract, counts, filtering, QR session controls, and `/teacher/exams/new` creation form.
+- Teacher Supabase Auth login and middleware protection for teacher routes when live mode is enabled.
+- Projector display at `/classroom/:sessionToken`.
+- Public student flow at `/session/:sessionToken` with conditional phone/photo status, reason validation, private signed upload flow, duplicate protection, and receipt state.
+- Supabase PostgreSQL migration with teacher roles, exams, sessions, submissions, constraints, indexes, RLS, and a private storage bucket.
+- API handlers for exams, lifecycle transitions, authorized submissions, public session validation, and signed uploads.
+- Explicit mock adapter for local UI development. It is selected in development when `NEXT_PUBLIC_USE_MOCK_ADAPTER=true` or when the flag is absent. Production never silently falls back to mock data.
 
-## Setup
+## Local development
 
 ```bash
 npm install
@@ -19,11 +21,44 @@ cp .env.example .env.local
 npm run dev
 ```
 
-Open `http://localhost:3000`. The default `.env.example` keeps the explicit mock adapter enabled.
+The default local mode is mock-backed and does not persist student data. Use `http://localhost:3000`.
 
-## Environment
+## Supabase setup
 
-`NEXT_PUBLIC_APP_URL` is the public origin used when a teacher starts an exam. `NEXT_PUBLIC_USE_MOCK_ADAPTER` must be `false` only when the live API routes are available. `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` are placeholders for the browser-safe Supabase client; service-role keys must remain server-side.
+1. Create a Supabase project.
+2. Apply `supabase/migrations/20261023000000_initial_schema.sql` using the Supabase SQL editor or Supabase CLI.
+3. Enable Email/Password Auth and create teacher users.
+4. Insert each authorized teacher into `public.teacher_profiles` with the matching `auth.users.id` and role `teacher` or `admin`.
+5. Configure the environment variables below and set `NEXT_PUBLIC_USE_MOCK_ADAPTER=false`.
+
+```env
+NEXT_PUBLIC_APP_URL=https://your-public-app.example
+NEXT_PUBLIC_USE_MOCK_ADAPTER=false
+NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
+SUPABASE_SERVICE_ROLE_KEY=server-only-service-role-key
+SUPABASE_STORAGE_BUCKET=exam-photos
+```
+
+Never expose `SUPABASE_SERVICE_ROLE_KEY` to the browser or commit it. The migration creates a private `exam-photos` bucket. The service role is used only inside server route handlers for public-token lookup and signed storage operations.
+
+Teacher provisioning is intentionally controlled: create the user through Supabase Auth, then insert the matching profile from the Supabase SQL editor or an administrator-only provisioning tool. Public sign-up must not be used as a role-granting mechanism.
+
+## API routes
+
+- `POST /api/exams`
+- `POST /api/exams/:id/start`
+- `POST /api/exams/:id/close`
+- `POST /api/exams/:id/reopen`
+- `POST /api/auth/logout`
+- `GET /api/exams/:id`
+- `GET /api/exams/:id/submissions`
+- `GET /api/exams/:id/submissions/:submissionId/photo`
+- `GET /api/sessions/:token`
+- `POST /api/sessions/:token/submissions`
+- `POST /api/uploads/sign`
+
+Teacher routes derive ownership from the Supabase Auth session. Public routes use a random session token; only its SHA-256 hash is stored. The server enforces lifecycle status, deadlines, upload ownership, file limits, duplicate constraints, and student ID requirements.
 
 ## Checks
 
@@ -34,53 +69,8 @@ npm run test
 npm run build
 ```
 
-The current test suite covers the conditional submission schema. The live service adapter is intentionally not presented as connected until the backend contract is deployed.
+CI runs all four commands on pushes and pull requests through `.github/workflows/ci.yml`. The existing unit tests cover conditional submission validation. Supabase integration, storage, and authorization tests require a configured isolated Supabase project and are not claimed as locally executed without those credentials.
 
-## API contract
+## Deployment
 
-The live adapter expects:
-
-- `POST /api/exams`
-- `POST /api/exams/:id/start`
-- `POST /api/exams/:id/close`
-- `POST /api/exams/:id/reopen`
-- `GET /api/exams/:id`
-- `GET /api/exams/:id/submissions`
-- `GET /api/sessions/:id`
-- `POST /api/sessions/:id/submissions`
-- `POST /api/uploads/sign` for a short-lived private upload URL
-
-The server must derive ownership and authorization from the authenticated session, enforce exam deadlines and file constraints, and prevent duplicate submissions. Never trust IDs, status flags, or photo ownership sent by a browser.This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
-
-## Getting Started
-
-First, run the development server:
-
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
-
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
-
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Deploy the Next.js application to Vercel or another Node-compatible host with the environment variables above. Apply migrations before setting live mode. Keep backups enabled in Supabase, test restoring the database and storage bucket separately, and rotate the service-role key if it is ever exposed.
