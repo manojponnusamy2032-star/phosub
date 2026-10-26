@@ -1,6 +1,6 @@
 # Phosub
 
-QR-based student exam photo-submission workflow for classroom use.
+College classroom phone-submission accountability system, with the existing QR exam/photo workflow preserved as a separate feature.
 
 ## What is implemented
 
@@ -12,6 +12,7 @@ QR-based student exam photo-submission workflow for classroom use.
 - Supabase PostgreSQL migration with teacher roles, exams, sessions, submissions, constraints, indexes, RLS, and a private storage bucket.
 - API handlers for exams, lifecycle transitions, authorized submissions, public session validation, and signed uploads.
 - Explicit mock adapter for local UI development. It is selected in development when `NEXT_PUBLIC_USE_MOCK_ADAPTER=true` or when the flag is absent. Production never silently falls back to mock data.
+- No-QR phone workflow at `/mentor/phone` and `/student`: mentors start/end sessions, students report `submitted`, `taken_back`, or `not_submitted`, and every transition is server-timestamped in an immutable event history.
 
 ## Local development
 
@@ -26,10 +27,11 @@ The default local mode is mock-backed and does not persist student data. Use `ht
 ## Supabase setup
 
 1. Create a Supabase project.
-2. Apply `supabase/migrations/20261023000000_initial_schema.sql` using the Supabase SQL editor or Supabase CLI.
+2. Apply the already-existing migrations in order, then apply `supabase/migrations/20261023020000_phone_tracking.sql` for phone sessions and status history.
 3. Enable Email/Password Auth and create teacher users.
-4. Insert each authorized teacher into `public.teacher_profiles` with the matching `auth.users.id` and role `teacher` or `admin`.
-5. Configure the environment variables below and set `NEXT_PUBLIC_USE_MOCK_ADAPTER=false`.
+4. Insert each authorized mentor into `public.teacher_profiles` with the matching `auth.users.id` and role `mentor`.
+5. Insert students into `public.student_profiles` with their Auth user ID, trusted name, and college email.
+6. Configure the environment variables below and set `NEXT_PUBLIC_USE_MOCK_ADAPTER=false`.
 
 ```env
 NEXT_PUBLIC_APP_URL=https://your-public-app.example
@@ -57,8 +59,17 @@ Teacher provisioning is intentionally controlled: create the user through Supaba
 - `GET /api/sessions/:token`
 - `POST /api/sessions/:token/submissions`
 - `POST /api/uploads/sign`
+- `GET /api/phone-sessions/active`
+- `GET /api/phone-sessions`
+- `POST /api/phone-sessions`
+- `GET /api/phone-sessions/:id`
+- `POST /api/phone-sessions/:id/status`
+- `POST /api/phone-sessions/:id/end`
+- `GET /api/phone-sessions/:id/events`
 
 Teacher routes derive ownership from the Supabase Auth session. Public routes use a random session token; only its SHA-256 hash is stored. The server enforces lifecycle status, deadlines, upload ownership, file limits, duplicate constraints, and student ID requirements.
+
+Phone status transitions use the `transition_phone_status` PostgreSQL function. It locks the session/current row, validates eligibility and allowed transitions, updates current status, and appends an event atomically. Students must be enrolled in `phone_session_students`; the current implementation enrolls all student profiles when a mentor starts a session without an explicit ID list.
 
 ## Checks
 

@@ -5,7 +5,7 @@ import { hasSupabasePublicConfig } from "@/lib/supabase/config";
 export async function proxy(request: NextRequest) {
   if (process.env.NEXT_PUBLIC_USE_MOCK_ADAPTER === "true" || (process.env.NODE_ENV !== "production" && !process.env.NEXT_PUBLIC_USE_MOCK_ADAPTER)) return NextResponse.next();
   const pathname = request.nextUrl.pathname;
-  const isPublic = pathname === "/login" || pathname === "/logout" || pathname === "/api/auth/logout" || pathname.startsWith("/session/") || pathname.startsWith("/classroom/") || pathname.startsWith("/api/sessions/") || pathname.startsWith("/api/uploads/");
+  const isPublic = pathname === "/login" || pathname === "/student/login" || pathname === "/logout" || pathname === "/api/auth/logout" || pathname.startsWith("/session/") || pathname.startsWith("/classroom/") || pathname.startsWith("/api/sessions/") || pathname.startsWith("/api/uploads/");
   if (isPublic) return NextResponse.next();
   const response = NextResponse.next({ request });
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;

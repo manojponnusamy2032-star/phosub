@@ -1,5 +1,5 @@
-import Dashboard from "@/components/dashboard";
+import MentorPhonePage from "./mentor/phone/page";
 
 export default function Home() {
-  return <Dashboard />;
+  return <MentorPhonePage />;
 }

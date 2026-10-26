@@ -31,3 +31,18 @@ export const submissionSchema = z
 
 export type ExamFormValues = z.infer<typeof examSchema>;
 export type SubmissionFormValues = z.infer<typeof submissionSchema>;
+
+export const phoneSessionSchema = z.object({
+  title: z.string().trim().min(2, "Enter a session title"),
+  classGroup: z.string().trim().min(1, "Enter a class or group"),
+  classroom: z.string().trim().optional(),
+  studentIds: z.array(z.string().uuid()).optional(),
+});
+
+export const phoneStatusSchema = z.object({
+  status: z.enum(["submitted", "taken_back", "not_submitted"]),
+  reason: z.string().trim().optional(),
+  requestId: z.string().uuid().optional(),
+}).superRefine((value, context) => {
+  if ((value.status === "taken_back" || value.status === "not_submitted") && !value.reason) context.addIssue({ code: z.ZodIssueCode.custom, path: ["reason"], message: "A reason is required for this status." });
+});
