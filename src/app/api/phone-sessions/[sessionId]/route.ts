@@ -10,8 +10,14 @@ export async function GET(_request: Request, { params }: { params: Promise<{ ses
       const { supabase } = await requireMentor();
       const { data: session, error } = await supabase.from("phone_sessions").select("*").eq("id", sessionId).single();
       if (error || !session) return NextResponse.json({ error: "Session not found" }, { status: 404 });
-      const { data: rows } = await supabase.from("phone_statuses").select("student_id, current_status, current_reason, updated_at, student_profiles(full_name, college_email)").eq("session_id", sessionId);
-      const statuses = (rows ?? []).map((row) => { const profile = row.student_profiles as unknown as { full_name: string; college_email: string } | null; return { studentId: row.student_id, name: profile?.full_name ?? "", email: profile?.college_email ?? "", status: row.current_status, reason: row.current_reason ?? undefined, updatedAt: row.updated_at }; });
+      const { data: enrollments } = await supabase.from("phone_session_students").select("student_id, student_profiles(full_name, college_email)").eq("session_id", sessionId);
+      const { data: statusRows } = await supabase.from("phone_statuses").select("student_id, current_status, current_reason, updated_at").eq("session_id", sessionId);
+      const statusMap = new Map((statusRows ?? []).map((r) => [r.student_id, r]));
+      const statuses = (enrollments ?? []).map((row) => {
+        const profile = row.student_profiles as unknown as { full_name: string; college_email: string } | null;
+        const st = statusMap.get(row.student_id);
+        return { studentId: row.student_id, name: profile?.full_name ?? "", email: profile?.college_email ?? "", status: st?.current_status ?? "not_reported", reason: st?.current_reason ?? undefined, updatedAt: st?.updated_at ?? session.started_at };
+      });
       const { count } = await supabase.from("phone_session_students").select("student_id", { count: "exact", head: true }).eq("session_id", sessionId);
       const result = phoneSessionResponse(session, statuses); result.totalEligible = count ?? result.totalEligible; result.notReported = Math.max(result.totalEligible - result.submitted - result.notSubmitted - result.takenBack, 0); return NextResponse.json({ session: result, students: statuses });
     } catch (mentorError) {

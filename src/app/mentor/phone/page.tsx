@@ -1,7 +1,7 @@
 "use client";
 /* eslint-disable @next/next/no-html-link-for-pages */
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Check, Clock3, Phone, Plus, RefreshCw, Square, Users } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { phoneApi } from "@/lib/phone-api";
@@ -22,11 +22,13 @@ export default function MentorPhonePage() {
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  let isLoading = false;
+  const [isLoading, setIsLoading] = useState(false);
+  const isLoadingRef = useRef(false);
 
   async function load({ initial = false }: { initial?: boolean } = {}) {
-    if (isLoading) return;
-    isLoading = true;
+    if (isLoadingRef.current) return;
+    isLoadingRef.current = true;
+    setIsLoading(true);
     if (initial) setLoading(true);
     try {
       const list = await phoneApi.list();
@@ -44,7 +46,8 @@ export default function MentorPhonePage() {
       const message = loadError instanceof Error ? loadError.message : "Could not load phone sessions.";
       setError(message);
     } finally {
-      isLoading = false;
+      isLoadingRef.current = false;
+      setIsLoading(false);
     }
   }
 

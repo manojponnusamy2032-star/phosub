@@ -151,7 +151,7 @@ export default function StudentAuthPage() {
 
         <p className="mt-6 text-center sans text-sm">
           {mode === "signin"
-            ? <span>Don't have an account? <button type="button" onClick={() => { setMode("signup"); setError(""); }} className="font-bold text-[var(--ink)] underline underline-offset-4">Create one</button>.</span>
+            ? <span>Don&apos;t have an account? <button type="button" onClick={() => { setMode("signup"); setError(""); }} className="font-bold text-[var(--ink)] underline underline-offset-4">Create one</button>.</span>
             : <span>Already have an account? <button type="button" onClick={() => { setMode("signin"); setError(""); }} className="font-bold text-[var(--ink)] underline underline-offset-4">Sign in</button>.</span>}
         </p>
         <p className="mt-3 text-center sans text-xs text-[var(--muted)]">Problems signing in? Ask your mentor to provision your account.</p>

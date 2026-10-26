@@ -12,12 +12,12 @@ export default function MentorStudentsPage() {
   const [created, setCreated] = useState<{ email: string; password: string } | null>(null);
   const [copied, setCopied] = useState(false);
 
-  const load = async () => {
-    const res = await fetch("/api/students");
-    if (res.ok) setStudents(await res.json());
-  };
-
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    void (async () => {
+      const res = await fetch("/api/students");
+      if (res.ok) setStudents(await res.json());
+    })();
+  }, []);
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -37,7 +37,8 @@ export default function MentorStudentsPage() {
       if (!res.ok) throw new Error(body?.error ?? "Could not create student.");
       setCreated({ email: String(form.get("college_email")), password: String(form.get("password")) });
       (event.currentTarget as HTMLFormElement).reset();
-      await load();
+      const res2 = await fetch("/api/students");
+      if (res2.ok) setStudents(await res2.json());
     } catch (e) { setError(e instanceof Error ? e.message : "Could not create student."); }
     finally { setBusy(false); }
   };
