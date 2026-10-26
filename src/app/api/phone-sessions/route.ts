@@ -15,13 +15,15 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    const { supabase, user } = await requireMentor();
+    const { supabase, user, profile } = await requireMentor();
     const parsed = phoneSessionSchema.safeParse(await request.json());
     if (!parsed.success) return NextResponse.json({ error: "Invalid session details", issues: parsed.error.flatten() }, { status: 400 });
     const { data: session, error } = await supabase.from("phone_sessions").insert({ mentor_id: user.id, title: parsed.data.title, class_group: parsed.data.classGroup, classroom: parsed.data.classroom || null }).select().single();
     if (error || !session) return NextResponse.json({ error: error?.code === "23505" ? "An active session already exists for this group." : "Could not start phone session." }, { status: 409 });
     const admin = createSupabaseAdminClient();
-    const studentQuery = parsed.data.studentIds?.length ? admin.from("student_profiles").select("user_id").in("user_id", parsed.data.studentIds) : admin.from("student_profiles").select("user_id");
+    const mentorSquad = (profile as { squad?: string } | null)?.squad;
+    let studentQuery = parsed.data.studentIds?.length ? admin.from("student_profiles").select("user_id").in("user_id", parsed.data.studentIds) : admin.from("student_profiles").select("user_id");
+    if (mentorSquad) studentQuery = studentQuery.eq("squad", mentorSquad);
     const { data: students } = await studentQuery;
     if (students?.length) await admin.from("phone_session_students").insert(students.map((student) => ({ session_id: session.id, student_id: student.user_id })));
     return NextResponse.json(session, { status: 201 });

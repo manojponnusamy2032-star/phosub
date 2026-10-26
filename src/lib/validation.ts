@@ -33,8 +33,8 @@ export type ExamFormValues = z.infer<typeof examSchema>;
 export type SubmissionFormValues = z.infer<typeof submissionSchema>;
 
 export const phoneSessionSchema = z.object({
-  title: z.string().trim().min(2, "Enter a session title"),
-  classGroup: z.string().trim().min(1, "Enter a class or group"),
+  title: z.string().trim().min(1, "Enter a session title"),
+  classGroup: z.string().trim().min(1, "Select a squad"),
   classroom: z.string().trim().optional(),
   studentIds: z.array(z.string().uuid()).optional(),
 });

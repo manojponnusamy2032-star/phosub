@@ -1,10 +1,25 @@
 import type { PhoneSession, PhoneSessionForm, PhoneStatusEvent, StudentPhoneStatus } from "./phone-types";
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
-  const response = await fetch(`/api/phone-sessions${path}`, { ...options, headers: { "Content-Type": "application/json", ...options?.headers } });
-  const body = await response.json().catch(() => null) as { error?: string } | T | null;
-  if (!response.ok) throw new Error((body as { error?: string } | null)?.error ?? "Phone session request failed.");
-  return body as T;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15000);
+  try {
+    const response = await fetch(`/api/phone-sessions${path}`, { ...options, headers: { "Content-Type": "application/json", ...options?.headers }, signal: controller.signal });
+    clearTimeout(timeout);
+    const body = await response.json().catch(() => null) as { error?: string; issues?: unknown } | T | null;
+    if (!response.ok) {
+      const message = (body as { error?: string; issues?: unknown } | null)?.error ?? "Phone session request failed.";
+      const issues = (body as { error?: string; issues?: unknown } | null)?.issues;
+      const err = new Error(message) as Error & { issues?: unknown };
+      err.issues = issues;
+      throw err;
+    }
+    return body as T;
+  } catch (err) {
+    clearTimeout(timeout);
+    if (err instanceof DOMException && err.name === "AbortError") throw new Error("Request timed out. Please try again.");
+    throw err;
+  }
 }
 
 export const phoneApi = {

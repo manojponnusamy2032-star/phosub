@@ -29,7 +29,7 @@ export async function requireTeacher() {
   const supabase = await createSupabaseServerClient();
   const { data: { user }, error } = await supabase.auth.getUser();
   if (error || !user) throw new Response("Authentication required", { status: 401 });
-  const { data: profile, error: profileError } = await supabase.from("teacher_profiles").select("role").eq("id", user.id).single();
+  const { data: profile, error: profileError } = await supabase.from("teacher_profiles").select("role, squad").eq("id", user.id).single();
   const authorizationError = getTeacherAuthorizationError(profile, profileError);
   if (authorizationError) throw new Response(authorizationError, { status: 403 });
   return { supabase, user, profile };
@@ -45,7 +45,7 @@ export async function requireStudent() {
   const supabase = await createSupabaseServerClient();
   const { data: { user }, error } = await supabase.auth.getUser();
   if (error || !user) throw new Response("Authentication required", { status: 401 });
-  const { data: profile, error: profileError } = await supabase.from("student_profiles").select("user_id, full_name, college_email").eq("user_id", user.id).single();
+  const { data: profile, error: profileError } = await supabase.from("student_profiles").select("user_id, full_name, college_email, squad").eq("user_id", user.id).single();
   if (profileError || !profile) throw new Response("Student profile required", { status: 403 });
   return { supabase, user, profile };
 }

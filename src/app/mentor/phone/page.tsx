@@ -18,13 +18,21 @@ export default function MentorPhonePage() {
   const [classGroup, setClassGroup] = useState("");
   const [classroom, setClassroom] = useState("");
   const [error, setError] = useState("");
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
+  const [loading, setLoading] = useState(true);
 
-  async function load() {
+  let isLoading = false;
+
+  async function load({ initial = false }: { initial?: boolean } = {}) {
+    if (isLoading) return;
+    isLoading = true;
+    if (initial) setLoading(true);
     try {
-      setError("");
       const list = await phoneApi.list();
       setSessions(list);
+      setError("");
+      if (initial) setLoading(false);
       const active = selected ? list.find((item) => item.id === selected.id) : list.find((item) => item.status === "active") ?? list[0];
       if (!active) return;
       const detail = await phoneApi.get(active.id);
@@ -32,42 +40,86 @@ export default function MentorPhonePage() {
       setStudents(detail.students);
       setEvents(await phoneApi.events(active.id));
     } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : "Could not load phone sessions.");
+      if (initial) setLoading(false);
+      const message = loadError instanceof Error ? loadError.message : "Could not load phone sessions.";
+      setError(message);
+    } finally {
+      isLoading = false;
     }
   }
 
   useEffect(() => {
-    const firstLoad = window.setTimeout(() => { void load(); }, 0);
-    const refresh = window.setInterval(() => { void load(); }, 5000);
+    const firstLoad = window.setTimeout(() => { void load({ initial: true }); }, 0);
+    const refresh = window.setInterval(() => { void load({ initial: false }); }, 5000);
     return () => { window.clearTimeout(firstLoad); window.clearInterval(refresh); };
   }, []);
 
   async function create() {
     setBusy(true);
+    setError("");
+    setFieldErrors({});
     try {
       const session = await phoneApi.create({ title, classGroup, classroom });
       setTitle(""); setClassGroup(""); setClassroom(""); setSelected(session);
-      await load();
+      void load();
     } catch (createError) {
-      setError(createError instanceof Error ? createError.message : "Could not start session.");
+      const err = createError as Error & { issues?: unknown };
+      if (err.issues) {
+        const fieldErrors: Record<string, string> = {};
+        const flat = err.issues as { fieldErrors?: Record<string, { message: string }[]> };
+        Object.entries(flat.fieldErrors ?? {}).forEach(([key, val]) => {
+          fieldErrors[key] = val?.[0]?.message ?? "Invalid";
+        });
+        setFieldErrors(fieldErrors);
+        setError(Object.values(fieldErrors).join(" "));
+      } else {
+        setError(err instanceof Error ? err.message : "Could not start session.");
+      }
     } finally { setBusy(false); }
   }
 
   async function end() {
     if (!selected || !window.confirm("End this phone session? Students will no longer be able to change status.")) return;
     setBusy(true);
-    try { await phoneApi.end(selected.id); await load(); }
+    try { await phoneApi.end(selected.id); void load(); }
     catch (endError) { setError(endError instanceof Error ? endError.message : "Could not end session."); }
     finally { setBusy(false); }
   }
 
   const summaryCards: SummaryCard[] = selected ? [["Eligible", selected.totalEligible, Users], ["Submitted", selected.submitted, Check], ["Taken back", selected.takenBack, Phone], ["Not reported", selected.notReported, Clock3]] : [];
 
+  if (loading) {
+    return <main className="app-grid min-h-screen px-5 py-8">
+      <div className="mx-auto max-w-7xl py-20 flex items-center justify-center">
+        <div className="flex flex-col items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-full border-4 border-[var(--line)] border-t-[var(--ink)] animate-spin"></div>
+          <p className="sans text-sm text-[var(--muted)]">Loading your sessions…</p>
+        </div>
+      </div>
+    </main>;
+  }
+
   return <main className="app-grid min-h-screen px-5 py-8"><div className="mx-auto max-w-7xl">
     <header className="flex flex-wrap items-start justify-between gap-4"><div><p className="sans text-xs font-bold uppercase tracking-[.18em] text-[var(--blue)]">Mentor workspace</p><h1 className="mt-2 text-4xl font-bold">Phone accountability</h1><p className="mt-2 sans text-sm text-[var(--muted)]">One classroom action, server-timestamped student status.</p></div><a href="/" className="rounded border border-[var(--line)] bg-white px-4 py-2 sans text-sm font-bold">Exam dashboard</a></header>
-    {error && <div role="alert" className="mt-6 rounded-lg border border-[#f0c6b6] bg-[#fff5f1] p-4 sans text-sm text-[#a54627]">{error}</div>}
+    {!loading && error && <div role="alert" className="mt-6 rounded-lg border border-[#f0c6b6] bg-[#fff5f1] p-4 sans text-sm text-[#a54627]">{error}</div>}
     <div className="mt-8 grid gap-6 lg:grid-cols-[340px_1fr]">
-      <section className="rounded-xl border border-[var(--line)] bg-white p-5"><div className="flex items-center gap-2"><Plus size={18} className="text-[var(--orange)]" /><h2 className="text-xl font-bold">Start a session</h2></div><div className="mt-5 space-y-3"><input className="input" value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Session title" /><input className="input" value={classGroup} onChange={(event) => setClassGroup(event.target.value)} placeholder="Class or group" /><input className="input" value={classroom} onChange={(event) => setClassroom(event.target.value)} placeholder="Classroom (optional)" /><button disabled={busy || !title.trim() || !classGroup.trim()} onClick={() => void create()} className="min-h-12 w-full rounded bg-[var(--orange)] px-4 sans text-sm font-bold text-white disabled:opacity-50">Start phone session</button></div><div className="mt-8 border-t border-[var(--line)] pt-5"><div className="flex items-center justify-between"><h2 className="font-bold">Session history</h2><button onClick={() => void load()} aria-label="Refresh sessions" className="rounded border border-[var(--line)] p-2"><RefreshCw size={15} /></button></div><div className="mt-3 space-y-2">{sessions.map((session) => <button key={session.id} onClick={() => setSelected(session)} className={`w-full rounded border p-3 text-left ${selected?.id === session.id ? "border-[var(--blue)] bg-[var(--blue-soft)]" : "border-[var(--line)]"}`}><p className="font-bold">{session.title}</p><p className="mt-1 sans text-xs text-[var(--muted)]">{session.classGroup} · {session.status}</p></button>)}{sessions.length === 0 && <p className="sans text-sm text-[var(--muted)]">No sessions yet.</p>}</div></div></section>
+      <section className="rounded-xl border border-[var(--line)] bg-white p-5"><div className="flex items-center gap-2"><Plus size={18} className="text-[var(--orange)]" /><h2 className="text-xl font-bold">Start a session</h2></div><div className="mt-5 space-y-3">
+          <div className="space-y-1">
+            <input className={`input ${fieldErrors.title ? "border-[#b9502b]" : ""}`} value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Session title" />
+            {fieldErrors.title && <p className="sans text-xs text-[#b9502b]">{fieldErrors.title}</p>}
+          </div>
+          <div className="space-y-1">
+            <select className={`input ${fieldErrors.classGroup ? "border-[#b9502b]" : ""}`} value={classGroup} onChange={(event) => setClassGroup(event.target.value)}>
+              <option value="">Select squad</option>
+              <option value="138">Squad 138</option>
+              <option value="139">Squad 139</option>
+              <option value="183">Squad 183</option>
+            </select>
+            {fieldErrors.classGroup && <p className="sans text-xs text-[#b9502b]">{fieldErrors.classGroup}</p>}
+          </div>
+          <input className="input" value={classroom} onChange={(event) => setClassroom(event.target.value)} placeholder="Classroom (optional)" />
+          <button disabled={busy || !title.trim() || !classGroup.trim()} onClick={() => void create()} className="min-h-12 w-full rounded bg-[var(--orange)] px-4 sans text-sm font-bold text-white disabled:opacity-50">Start phone session</button>
+        </div><div className="mt-8 border-t border-[var(--line)] pt-5"><div className="flex items-center justify-between"><h2 className="font-bold">Session history</h2><button onClick={() => void load()} aria-label="Refresh sessions" className="rounded border border-[var(--line)] p-2"><RefreshCw size={15} /></button></div><div className="mt-3 space-y-2">{sessions.map((session) => <button key={session.id} onClick={() => setSelected(session)} className={`w-full rounded border p-3 text-left ${selected?.id === session.id ? "border-[var(--blue)] bg-[var(--blue-soft)]" : "border-[var(--line)]"}`}><p className="font-bold">{session.title}</p><p className="mt-1 sans text-xs text-[var(--muted)]">{session.classGroup} · {session.status}</p></button>)}{sessions.length === 0 && <p className="sans text-sm text-[var(--muted)]">No sessions yet.</p>}</div></div></section>
       <section>{selected ? <><div className="rounded-xl border border-[var(--line)] bg-white p-5"><div className="flex flex-wrap items-start justify-between gap-3"><div><span className={`rounded-full px-3 py-1 sans text-xs font-bold uppercase ${selected.status === "active" ? "bg-[#e4f5ee] text-[var(--green)]" : "bg-slate-100 text-slate-600"}`}>{selected.status}</span><h2 className="mt-3 text-2xl font-bold">{selected.title}</h2><p className="mt-1 sans text-sm text-[var(--muted)]">{selected.classGroup}{selected.classroom ? ` · ${selected.classroom}` : ""}</p></div>{selected.status === "active" && <button disabled={busy} onClick={() => void end()} className="flex items-center gap-2 rounded bg-[var(--ink)] px-4 py-2.5 sans text-sm font-bold text-white disabled:opacity-50"><Square size={14} /> End session</button>}</div><div className="mt-6 grid gap-3 sm:grid-cols-4">{summaryCards.map(([label, value, Icon]) => <div key={label} className="rounded-lg border border-[var(--line)] p-4"><Icon size={16} className="text-[var(--blue)]" /><p className="mt-3 text-2xl font-bold">{value}</p><p className="mt-1 sans text-xs text-[var(--muted)]">{label}</p></div>)}</div></div><div className="mt-6 grid gap-6 xl:grid-cols-[1fr_360px]"><StudentTable students={students} /><Timeline events={events} /></div></> : <div className="rounded-xl border border-dashed border-[var(--line)] bg-white p-12 text-center"><Phone className="mx-auto text-[var(--blue)]" /><h2 className="mt-4 text-xl font-bold">Start or select a session</h2><p className="mt-2 sans text-sm text-[var(--muted)]">Students will see eligible active sessions at `/student`.</p></div>}</section>
     </div>
   </div></main>;

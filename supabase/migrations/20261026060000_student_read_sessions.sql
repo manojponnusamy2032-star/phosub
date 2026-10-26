@@ -1,0 +1,1 @@
+create policy "students read enrolled sessions" on public.phone_sessions for select using (exists (select 1 from public.phone_session_students where phone_session_students.session_id = phone_sessions.id and phone_session_students.student_id = auth.uid()));
