@@ -42,7 +42,7 @@ SUPABASE_SERVICE_ROLE_KEY=server-only-service-role-key
 SUPABASE_STORAGE_BUCKET=exam-photos
 ```
 
-Never expose `SUPABASE_SERVICE_ROLE_KEY` to the browser or commit it. The migration creates a private `exam-photos` bucket. The service role is used only inside server route handlers for public-token lookup and signed storage operations.
+Never expose `SUPABASE_SERVICE_ROLE_KEY` to the browser or commit it. The migration creates a private `exam-photos` bucket. The service role is used only on the server for trusted staff/student profile lookups, account provisioning, public-token lookup, and signed storage operations.
 
 Teacher provisioning is intentionally controlled: create the user through Supabase Auth, then insert the matching profile from the Supabase SQL editor or an administrator-only provisioning tool. Public sign-up must not be used as a role-granting mechanism.
 

@@ -30,9 +30,18 @@ export async function requireTeacher() {
   const supabase = await createSupabaseServerClient();
   const { data: { user }, error } = await supabase.auth.getUser();
   if (error || !user) throw new Response("Authentication required", { status: 401 });
-  const { data: profile, error: profileError } = await supabase.from("teacher_profiles").select("role, squad").eq("id", user.id).single();
-  const authorizationError = getTeacherAuthorizationError(profile, profileError);
+
+  let admin;
+  try {
+    admin = createSupabaseAdminClient();
+  } catch {
+    throw new Response("Staff authentication is not configured.", { status: 503 });
+  }
+  const { data: profile, error: profileError } = await admin.from("teacher_profiles").select("role, squad").eq("id", user.id).maybeSingle();
+  if (profileError) throw new Response("Staff profile lookup failed.", { status: 500 });
+  const authorizationError = getTeacherAuthorizationError(profile, null);
   if (authorizationError) throw new Response(authorizationError, { status: 403 });
+  if (!profile) throw new Response("Teacher access required", { status: 403 });
   return { supabase, user, profile };
 }
 

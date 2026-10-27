@@ -23,6 +23,60 @@ async function loadServer() {
   return await import("./server");
 }
 
+describe("requireTeacher", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    process.env.NEXT_PUBLIC_SUPABASE_URL = "https://example.supabase.co";
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = "anon-key";
+  });
+
+  it.each(["mentor", "teacher"])("accepts a %s profile", async (role) => {
+    authGetUser.mockResolvedValue({ data: { user: { id: "staff-1", email: "staff@example.com" } }, error: null });
+    createSupabaseAdminClient.mockReturnValue({
+      from: vi.fn(() => ({
+        select: vi.fn(() => ({
+          eq: vi.fn(() => ({ maybeSingle: vi.fn(async () => ({ data: { role, squad: "138" }, error: null })) })),
+        })),
+      })),
+    });
+
+    const { requireTeacher } = await loadServer();
+    const result = await requireTeacher();
+
+    expect(result.profile).toMatchObject({ role, squad: "138" });
+  });
+
+  it("returns forbidden when no staff profile exists", async () => {
+    authGetUser.mockResolvedValue({ data: { user: { id: "staff-1" } }, error: null });
+    createSupabaseAdminClient.mockReturnValue({
+      from: vi.fn(() => ({
+        select: vi.fn(() => ({ eq: vi.fn(() => ({ maybeSingle: vi.fn(async () => ({ data: null, error: null })) })) })),
+      })),
+    });
+
+    const { requireTeacher } = await loadServer();
+    const error = await requireTeacher().catch((caught) => caught);
+
+    expect(error).toBeInstanceOf(Response);
+    expect((error as Response).status).toBe(403);
+  });
+
+  it("returns a server error when the staff profile lookup fails", async () => {
+    authGetUser.mockResolvedValue({ data: { user: { id: "staff-1" } }, error: null });
+    createSupabaseAdminClient.mockReturnValue({
+      from: vi.fn(() => ({
+        select: vi.fn(() => ({ eq: vi.fn(() => ({ maybeSingle: vi.fn(async () => ({ data: null, error: new Error("db unavailable") })) })) })),
+      })),
+    });
+
+    const { requireTeacher } = await loadServer();
+    const error = await requireTeacher().catch((caught) => caught);
+
+    expect(error).toBeInstanceOf(Response);
+    expect((error as Response).status).toBe(500);
+  });
+});
+
 describe("requireStudent", () => {
   beforeEach(() => {
     vi.clearAllMocks();

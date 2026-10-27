@@ -7,11 +7,11 @@ export async function proxy(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
   const isPublic = pathname === "/login" || pathname === "/student/login" || pathname === "/student/auth" || pathname === "/student/welcome" || pathname === "/logout" || pathname === "/api/auth/logout" || pathname === "/api/student-signup" || pathname === "/api/mentor-signup" || pathname.startsWith("/session/") || pathname.startsWith("/classroom/") || pathname.startsWith("/api/sessions/") || pathname.startsWith("/api/uploads/");
   if (isPublic) return NextResponse.next();
+  if (pathname.startsWith("/api/")) return NextResponse.next();
   const response = NextResponse.next({ request });
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   if (!hasSupabasePublicConfig() || !url || !key) {
-    if (pathname.startsWith("/api/")) return NextResponse.json({ error: "Backend is not configured." }, { status: 503 });
     return NextResponse.redirect(new URL("/login?error=configuration", request.url));
   }
   const supabase = createServerClient(url, key, { cookies: { getAll: () => request.cookies.getAll(), setAll: (values) => values.forEach(({ name, value, options }) => { request.cookies.set(name, value); response.cookies.set(name, value, options); }) } });

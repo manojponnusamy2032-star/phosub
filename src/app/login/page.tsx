@@ -43,11 +43,11 @@ export default function LoginPage() {
         const { data, error: signInError } = await client.auth.signInWithPassword({ email, password });
         if (signInError) { setError(signInError.message || "Sign in failed. Check your college email and password."); return; }
         if (role === "mentor") {
-          const { data: profile } = await client.from("teacher_profiles").select("role").eq("id", data.user.id).single();
-          const foundRole = profile?.role;
-          if (foundRole !== "mentor" && foundRole !== "teacher" && foundRole !== "admin") {
-            await client.auth.signOut();
-            setError("This account is not a mentor account.");
+          const response = await fetch("/api/auth/staff", { cache: "no-store" });
+          const body = await response.json().catch(() => null);
+          if (!response.ok) {
+            if (response.status === 401 || response.status === 403) await client.auth.signOut();
+            setError(response.status === 403 ? "This account is not authorized as a mentor or teacher." : body?.error ?? "Could not verify staff access. Please try again.");
             return;
           }
           router.replace("/");
@@ -106,7 +106,7 @@ export default function LoginPage() {
 
   const isStudent = role === "student";
   const Icon = isStudent ? Phone : QrCode;
-  const title = mode === "signin" ? (isStudent ? "Student sign in" : "Teacher sign in") : (isStudent ? "Create student account" : "Create mentor account");
+  const title = mode === "signin" ? (isStudent ? "Student sign in" : "Mentor / teacher sign in") : (isStudent ? "Create student account" : "Create mentor account");
 
   return (
     <main className="app-grid flex min-h-screen items-center justify-center px-5 py-10">
@@ -121,7 +121,7 @@ export default function LoginPage() {
         </div>
 
         <div className="mt-6 grid grid-cols-2 gap-2 rounded-lg border border-[var(--line)] bg-[var(--paper)] p-1">
-          <button type="button" onClick={() => { setRole("mentor"); setMode("signin"); setError(""); }} className={`rounded px-3 py-2 sans text-sm font-bold ${role === "mentor" ? "bg-[var(--ink)] text-white" : "text-[var(--ink)]"}`}>Mentor</button>
+          <button type="button" onClick={() => { setRole("mentor"); setMode("signin"); setError(""); }} className={`rounded px-3 py-2 sans text-sm font-bold ${role === "mentor" ? "bg-[var(--ink)] text-white" : "text-[var(--ink)]"}`}>Mentor / Teacher</button>
           <button type="button" onClick={() => { setRole("student"); setError(""); }} className={`rounded px-3 py-2 sans text-sm font-bold ${role === "student" ? "bg-[var(--ink)] text-white" : "text-[var(--ink)]"}`}>Student</button>
         </div>
 
