@@ -1,7 +1,7 @@
 "use client";
 /* eslint-disable @next/next/no-html-link-for-pages */
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Check, Clock3, Phone, Plus, RefreshCw, Square, Users } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { phoneApi } from "@/lib/phone-api";
@@ -24,6 +24,7 @@ export default function MentorPhonePage() {
 
   const loadSeq = useRef(0);
   const inFlightRef = useRef(false);
+  const pendingTargetRef = useRef<string | undefined>(undefined);
   const mountedRef = useRef(true);
   const selectedIdRef = useRef<string | undefined>(undefined);
 
@@ -36,8 +37,12 @@ export default function MentorPhonePage() {
     selectedIdRef.current = selected?.id;
   }, [selected?.id]);
 
-  const load = useCallback(async ({ initial = false, targetId }: { initial?: boolean; targetId?: string } = {}) => {
-    if (inFlightRef.current) return;
+  const load = async ({ initial = false, targetId }: { initial?: boolean; targetId?: string } = {}) => {
+    if (inFlightRef.current) {
+      if (targetId) pendingTargetRef.current = targetId;
+      return;
+    }
+
     const seq = ++loadSeq.current;
     inFlightRef.current = true;
     if (initial) setLoading(true);
@@ -46,7 +51,8 @@ export default function MentorPhonePage() {
       if (!mountedRef.current || seq !== loadSeq.current) return;
       setSessions(list);
       setError("");
-      const wantedId = targetId ?? selectedIdRef.current;
+      const wantedId = targetId ?? pendingTargetRef.current ?? selectedIdRef.current;
+      pendingTargetRef.current = undefined;
       const target = wantedId
         ? list.find((item) => item.id === wantedId)
         : (list.find((item) => item.status === "active") ?? list[0]);
@@ -70,11 +76,19 @@ export default function MentorPhonePage() {
     } finally {
       if (mountedRef.current && initial) setLoading(false);
       inFlightRef.current = false;
+      if (pendingTargetRef.current && mountedRef.current) {
+        const nextTarget = pendingTargetRef.current;
+        pendingTargetRef.current = undefined;
+        void load({ targetId: nextTarget });
+      }
     }
-  }, []);
+  };
 
-  const selectSession = useCallback(async (id: string) => {
-    if (inFlightRef.current) return;
+  const selectSession = async (id: string) => {
+    if (inFlightRef.current) {
+      pendingTargetRef.current = id;
+      return;
+    }
     const seq = ++loadSeq.current;
     inFlightRef.current = true;
     selectedIdRef.current = id;
@@ -91,8 +105,13 @@ export default function MentorPhonePage() {
       setError(selectError instanceof Error ? selectError.message : "Could not load phone session.");
     } finally {
       inFlightRef.current = false;
+      if (pendingTargetRef.current && mountedRef.current) {
+        const nextTarget = pendingTargetRef.current;
+        pendingTargetRef.current = undefined;
+        void load({ targetId: nextTarget });
+      }
     }
-  }, []);
+  };
 
   useEffect(() => {
     let cancelled = false;

@@ -47,28 +47,21 @@ export async function requireStudent() {
   const { data: { user }, error } = await supabase.auth.getUser();
   if (error || !user) throw new Response("Authentication required", { status: 401 });
 
-  const selectColumns = "user_id, full_name, college_email, squad";
-  const profileQuery = supabase
+  const selectColumns = "user_id, full_name, college_email, role, squad";
+  const profileResult = await supabase
     .from("student_profiles")
     .select(selectColumns)
-    .eq("user_id", user.id);
-  const profileResult = typeof profileQuery.maybeSingle === "function"
-    ? await profileQuery.maybeSingle()
-    : (typeof profileQuery.single === "function" ? await profileQuery.single() : await profileQuery);
-  const profile = profileResult && Object.prototype.hasOwnProperty.call(profileResult, "data")
-    ? profileResult.data
-    : profileResult;
-  const profileError = profileResult && Object.prototype.hasOwnProperty.call(profileResult, "error")
-    ? profileResult.error
-    : null;
+    .eq("user_id", user.id)
+    .maybeSingle();
 
-  if (profileError) {
+  if (profileResult.error) {
     throw new Response("Student profile lookup failed.", { status: 500 });
   }
-  if (profile) return { supabase, user, profile };
+  if (profileResult.data) return { supabase, user, profile: profileResult.data };
 
-  // Safe, idempotent provisioning for a legitimate missing student profile.
-  // Uses the service-role client only on the server; never exposes it to clients.
+  const email = String(user.email ?? "").trim().toLowerCase();
+  if (!email) throw new Response("Student profile required", { status: 403 });
+
   let admin;
   try {
     admin = createSupabaseAdminClient();
@@ -76,69 +69,40 @@ export async function requireStudent() {
     throw new Response("Student profile required", { status: 403 });
   }
 
-  // Do not auto-provision mentor/admin accounts as students.
-  const teacherQuery = admin
+  const teacherResult = await admin
     .from("teacher_profiles")
     .select("id")
-    .eq("id", user.id);
-  const teacherResult = typeof teacherQuery.maybeSingle === "function"
-    ? await teacherQuery.maybeSingle()
-    : (typeof teacherQuery.single === "function" ? await teacherQuery.single() : await teacherQuery);
-  const teacherProfile = teacherResult && Object.prototype.hasOwnProperty.call(teacherResult, "data")
-    ? teacherResult.data
-    : teacherResult;
-  if (teacherProfile) throw new Response("Student profile required", { status: 403 });
+    .eq("id", user.id)
+    .maybeSingle();
+  if (teacherResult.data) throw new Response("Student profile required", { status: 403 });
 
-  const existingQuery = admin
+  const existingEmailResult = await admin
     .from("student_profiles")
     .select(selectColumns)
-    .eq("user_id", user.id);
-  const existingResult = typeof existingQuery.maybeSingle === "function"
-    ? await existingQuery.maybeSingle()
-    : (typeof existingQuery.single === "function" ? await existingQuery.single() : await existingQuery);
-  const existing = existingResult && Object.prototype.hasOwnProperty.call(existingResult, "data")
-    ? existingResult.data
-    : existingResult;
-  if (existing) return { supabase, user, profile: existing };
+    .eq("college_email", email)
+    .maybeSingle();
+  if (existingEmailResult.error) {
+    throw new Response("Student profile lookup failed.", { status: 500 });
+  }
+  if (existingEmailResult.data) {
+    const existingProfile = existingEmailResult.data as { user_id: string; full_name: string; college_email: string; squad?: string | null; role?: string | null };
+    if (existingProfile.user_id === user.id) return { supabase, user, profile: existingProfile };
 
-  const fullName = String(user.user_metadata?.full_name ?? user.user_metadata?.name ?? user.email?.split("@")[0] ?? "Student").trim();
-  const safeName = fullName.length >= 2 ? fullName : "Student";
-  const email = String(user.email ?? "").trim().toLowerCase();
-  if (!email) throw new Response("Student profile required", { status: 403 });
-
-  const insertQuery = admin
-    .from("student_profiles")
-    .insert({
-      user_id: user.id,
-      full_name: safeName,
-      college_email: email,
-      squad: null,
-    })
-    .select(selectColumns);
-  const insertResult = typeof insertQuery.single === "function"
-    ? await insertQuery.single()
-    : (typeof insertQuery.maybeSingle === "function" ? await insertQuery.maybeSingle() : await insertQuery);
-  const inserted = insertResult && Object.prototype.hasOwnProperty.call(insertResult, "data")
-    ? insertResult.data
-    : insertResult;
-  const insertError = insertResult && Object.prototype.hasOwnProperty.call(insertResult, "error")
-    ? insertResult.error
-    : null;
-
-  if (insertError || !inserted) {
-    const retryQuery = admin
+    const repairedResult = await admin
       .from("student_profiles")
+      .update({ user_id: user.id, full_name: existingProfile.full_name, college_email: email, squad: existingProfile.squad ?? null, role: existingProfile.role ?? "student" })
+      .eq("college_email", email)
       .select(selectColumns)
-      .eq("user_id", user.id);
-    const retryResult = typeof retryQuery.maybeSingle === "function"
-      ? await retryQuery.maybeSingle()
-      : (typeof retryQuery.single === "function" ? await retryQuery.single() : await retryQuery);
-    const retry = retryResult && Object.prototype.hasOwnProperty.call(retryResult, "data")
-      ? retryResult.data
-      : retryResult;
-    if (retry) return { supabase, user, profile: retry };
-    throw new Response("Student profile required", { status: 403 });
+      .single();
+
+    if (repairedResult.error || !repairedResult.data) {
+      throw new Response("Student profile could not be repaired.", { status: 500 });
+    }
+    return { supabase, user, profile: repairedResult.data };
   }
 
-  return { supabase, user, profile: inserted };
+  // The account is definitely not a mentor/admin and no valid student row exists yet.
+  // We do not create a null-squad profile here; the student must be provisioned through the
+  // trusted signup flow or by an authorized mentor with an explicit squad assignment.
+  throw new Response("Student profile required", { status: 403 });
 }
