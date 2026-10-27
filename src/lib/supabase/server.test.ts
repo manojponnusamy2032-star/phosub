@@ -68,6 +68,7 @@ describe("requireStudent", () => {
               eq: vi.fn(() => ({
                 maybeSingle: vi.fn(async () => ({ data: null, error: null })),
               })),
+              ilike: vi.fn(() => ({ maybeSingle: vi.fn(async () => ({ data: null, error: null })) })),
             })),
             insert,
           };
@@ -101,9 +102,9 @@ describe("requireStudent", () => {
           select: vi.fn(() => ({
             eq: vi.fn((column: string) => {
               if (column === "user_id") return { maybeSingle: vi.fn(async () => ({ data: null, error: null })) };
-              if (column === "college_email") return { maybeSingle: vi.fn(async () => ({ data: { user_id: "old-user", full_name: "Repair", college_email: "repair@example.com", squad: "138", role: "student" }, error: null })) };
               return { maybeSingle: vi.fn(async () => ({ data: null, error: null })) };
             }),
+            ilike: vi.fn(() => ({ maybeSingle: vi.fn(async () => ({ data: { user_id: "old-user", full_name: "Repair", college_email: "REPAIR@EXAMPLE.COM", squad: "138", role: "student" }, error: null })) })),
           })),
           update: vi.fn(() => ({
             eq: vi.fn(() => ({
@@ -133,6 +134,6 @@ describe("requireStudent", () => {
     const { requireStudent } = await loadServer();
     const result = await requireStudent();
 
-    expect(result.profile).toMatchObject({ user_id: "user-2", squad: "138" });
+    expect(result.profile).toMatchObject({ user_id: "user-2", college_email: "repair@example.com", squad: "138" });
   });
 });

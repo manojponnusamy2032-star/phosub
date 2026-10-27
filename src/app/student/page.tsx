@@ -35,7 +35,7 @@ export default function StudentPhonePage() {
     } catch (loadError) {
       const raw = loadError instanceof Error ? loadError.message : "Could not load your phone session.";
       let friendly = raw;
-      if (raw === "Student profile required") friendly = "Your profile has not been created yet. Please contact your mentor.";
+      if (raw === "Student profile required") friendly = "Your student profile is not linked yet. Ask your mentor to link this login to your squad.";
       else if (raw.toLowerCase().includes("squad")) friendly = "Your squad has not been assigned yet. Please contact your mentor.";
       else if (raw.toLowerCase().includes("failed to fetch") || raw.toLowerCase().includes("network")) friendly = "Could not reach the server. Please try again.";
       setError(friendly);

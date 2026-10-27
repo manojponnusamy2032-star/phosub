@@ -79,7 +79,7 @@ export async function requireStudent() {
   const existingEmailResult = await admin
     .from("student_profiles")
     .select(selectColumns)
-    .eq("college_email", email)
+    .ilike("college_email", email.replace(/[\\%_]/g, "\\$&"))
     .maybeSingle();
   if (existingEmailResult.error) {
     throw new Response("Student profile lookup failed.", { status: 500 });

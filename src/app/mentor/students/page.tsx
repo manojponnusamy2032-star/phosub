@@ -9,7 +9,7 @@ export default function MentorStudentsPage() {
   const [students, setStudents] = useState<Student[]>([]);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-  const [created, setCreated] = useState<{ email: string; password: string } | null>(null);
+  const [created, setCreated] = useState<{ email: string; password: string; linkedExisting: boolean } | null>(null);
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
@@ -35,7 +35,7 @@ export default function MentorStudentsPage() {
       });
       const body = await res.json().catch(() => null);
       if (!res.ok) throw new Error(body?.error ?? "Could not create student.");
-      setCreated({ email: String(form.get("college_email")), password: String(form.get("password")) });
+      setCreated({ email: body.email, password: String(form.get("password")), linkedExisting: Boolean(body.linkedExisting) });
       (event.currentTarget as HTMLFormElement).reset();
       const res2 = await fetch("/api/students");
       if (res2.ok) setStudents(await res2.json());
@@ -66,15 +66,14 @@ export default function MentorStudentsPage() {
         <form onSubmit={submit} className="mt-6 space-y-4 rounded-2xl border border-[var(--line)] bg-white p-6 shadow-sm">
           <label className="block"><span className="sans text-sm font-bold">Full name</span><input name="full_name" className="input mt-2" required placeholder="Demo Student" /></label>
           <label className="block"><span className="sans text-sm font-bold">College email</span><input name="college_email" type="email" className="input mt-2" required placeholder="student@college.edu" /></label>
-          <label className="block"><span className="sans text-sm font-bold">Temporary password</span><input name="password" type="password" className="input mt-2" required minLength={8} placeholder="••••••••" /></label>
+          <label className="block"><span className="sans text-sm font-bold">Temporary password (new accounts only)</span><input name="password" type="password" className="input mt-2" required minLength={8} placeholder="••••••••" /></label>
           {error && <p role="alert" className="sans text-sm text-[#b9502b]">{error}</p>}
           {created && (
             <div className="rounded-lg border border-[#d8e6d8] bg-[#f3faf3] p-3 sans text-sm">
-              <p className="font-bold text-[#2f6b3a]">Student created: {created.email}</p>
-              <p className="mt-1 text-[#2f6b3a]">Share these credentials: password <code>{created.password}</code></p>
-              <button type="button" onClick={copyCreds} className="mt-2 inline-flex items-center gap-1 text-xs font-bold text-[#2f6b3a]">
-                {copied ? <Check size={14} /> : <Copy size={14} />} {copied ? "Copied" : "Copy credentials"}
-              </button>
+              <p className="font-bold text-[#2f6b3a]">{created.linkedExisting ? "Existing student login linked:" : "Student created:"} {created.email}</p>
+              {created.linkedExisting
+                ? <p className="mt-1 text-[#2f6b3a]">Their existing password is unchanged.</p>
+                : <><p className="mt-1 text-[#2f6b3a]">Share these credentials: password <code>{created.password}</code></p><button type="button" onClick={copyCreds} className="mt-2 inline-flex items-center gap-1 text-xs font-bold text-[#2f6b3a]">{copied ? <Check size={14} /> : <Copy size={14} />} {copied ? "Copied" : "Copy credentials"}</button></>}
             </div>
           )}
           <button disabled={busy} className="flex min-h-12 w-full items-center justify-center gap-2 rounded bg-[var(--ink)] px-5 sans text-sm font-bold text-white disabled:opacity-60">
