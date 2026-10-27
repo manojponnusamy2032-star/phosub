@@ -44,18 +44,40 @@ export default function MentorPhonePage() {
         ? list.find((item) => item.id === targetId)
         : (list.find((item) => item.status === "active") ?? list[0]);
       if (!target) return;
+      selectedIdRef.current = target.id;
       const detail = await phoneApi.get(target.id);
-      if (seq !== loadSeq.current) return;
+      if (seq !== loadSeq.current || selectedIdRef.current !== target.id) return;
       setSelected(detail.session);
       setStudents(detail.students);
       const ev = await phoneApi.events(target.id);
-      if (seq !== loadSeq.current) return;
+      if (seq !== loadSeq.current || selectedIdRef.current !== target.id) return;
       setEvents(ev);
     } catch (loadError) {
       if (seq !== loadSeq.current) return;
       if (initial) setLoading(false);
       const message = loadError instanceof Error ? loadError.message : "Could not load phone sessions.";
       setError(message);
+    } finally {
+      isLoadingRef.current = false;
+    }
+  }, []);
+
+  const selectSession = useCallback(async (id: string) => {
+    if (isLoadingRef.current) return;
+    const seq = ++loadSeq.current;
+    isLoadingRef.current = true;
+    selectedIdRef.current = id;
+    try {
+      const detail = await phoneApi.get(id);
+      if (seq !== loadSeq.current || selectedIdRef.current !== id) return;
+      setSelected(detail.session);
+      setStudents(detail.students);
+      const ev = await phoneApi.events(id);
+      if (seq !== loadSeq.current || selectedIdRef.current !== id) return;
+      setEvents(ev);
+    } catch (selectError) {
+      if (seq !== loadSeq.current) return;
+      setError(selectError instanceof Error ? selectError.message : "Could not load phone session.");
     } finally {
       isLoadingRef.current = false;
     }
@@ -149,7 +171,7 @@ export default function MentorPhonePage() {
           </div>
           <input className="input" value={classroom} onChange={(event) => setClassroom(event.target.value)} placeholder="Classroom (optional)" />
           <button disabled={busy || !title.trim() || !classGroup.trim()} onClick={() => void create()} className="min-h-12 w-full rounded bg-[var(--orange)] px-4 sans text-sm font-bold text-white disabled:opacity-50">Start phone session</button>
-        </div><div className="mt-8 border-t border-[var(--line)] pt-5"><div className="flex items-center justify-between"><h2 className="font-bold">Session history</h2><button onClick={() => void load()} aria-label="Refresh sessions" className="rounded border border-[var(--line)] p-2"><RefreshCw size={15} /></button></div><div className="mt-3 space-y-2">{sessions.map((session) => <button key={session.id} onClick={() => setSelected(session)} className={`w-full rounded border p-3 text-left ${selected?.id === session.id ? "border-[var(--blue)] bg-[var(--blue-soft)]" : "border-[var(--line)]"}`}><p className="font-bold">{session.title}</p><p className="mt-1 sans text-xs text-[var(--muted)]">{session.classGroup} · {session.status}</p></button>)}{sessions.length === 0 && <p className="sans text-sm text-[var(--muted)]">No sessions yet.</p>}</div></div></section>
+        </div><div className="mt-8 border-t border-[var(--line)] pt-5"><div className="flex items-center justify-between"><h2 className="font-bold">Session history</h2><button onClick={() => void load()} aria-label="Refresh sessions" className="rounded border border-[var(--line)] p-2"><RefreshCw size={15} /></button></div><div className="mt-3 space-y-2">{sessions.map((session) => <button key={session.id} onClick={() => void selectSession(session.id)} className={`w-full rounded border p-3 text-left ${selected?.id === session.id ? "border-[var(--blue)] bg-[var(--blue-soft)]" : "border-[var(--line)]"}`}><p className="font-bold">{session.title}</p><p className="mt-1 sans text-xs text-[var(--muted)]">{session.classGroup} · {session.status}</p></button>)}{sessions.length === 0 && <p className="sans text-sm text-[var(--muted)]">No sessions yet.</p>}</div></div></section>
       <section>{selected ? <><div className="rounded-xl border border-[var(--line)] bg-white p-5"><div className="flex flex-wrap items-start justify-between gap-3"><div><span className={`rounded-full px-3 py-1 sans text-xs font-bold uppercase ${selected.status === "active" ? "bg-[#e4f5ee] text-[var(--green)]" : "bg-slate-100 text-slate-600"}`}>{selected.status}</span><h2 className="mt-3 text-2xl font-bold">{selected.title}</h2><p className="mt-1 sans text-sm text-[var(--muted)]">{selected.classGroup}{selected.classroom ? ` · ${selected.classroom}` : ""}</p></div>{selected.status === "active" && <button disabled={busy} onClick={() => void end()} className="flex items-center gap-2 rounded bg-[var(--ink)] px-4 py-2.5 sans text-sm font-bold text-white disabled:opacity-50"><Square size={14} /> End session</button>}</div><div className="mt-6 grid gap-3 sm:grid-cols-4">{summaryCards.map(([label, value, Icon]) => <div key={label} className="rounded-lg border border-[var(--line)] p-4"><Icon size={16} className="text-[var(--blue)]" /><p className="mt-3 text-2xl font-bold">{value}</p><p className="mt-1 sans text-xs text-[var(--muted)]">{label}</p></div>)}</div></div><div className="mt-6 grid gap-6 xl:grid-cols-[1fr_360px]"><StudentTable students={students} /><Timeline events={events} /></div></> : <div className="rounded-xl border border-dashed border-[var(--line)] bg-white p-12 text-center"><Phone className="mx-auto text-[var(--blue)]" /><h2 className="mt-4 text-xl font-bold">Start or select a session</h2><p className="mt-2 sans text-sm text-[var(--muted)]">Students will see eligible active sessions at `/student`.</p></div>}</section>
     </div>
   </div></main>;
