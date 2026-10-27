@@ -51,7 +51,7 @@ describe("active phone sessions route", () => {
     const res = await GET();
     expect(res.status).toBe(403);
     const body = await res.json();
-    expect(body.error).toBe("Student squad required");
+    expect(body.error).toBe("Your squad has not been assigned yet. Please contact your mentor.");
   });
 
   it("handles enrollment database failures", async () => {

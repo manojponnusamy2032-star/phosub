@@ -2,13 +2,14 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { errorResponse } from "@/lib/server/http";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { ALLOWED_SQUADS } from "@/lib/squads";
 
 const signupSchema = z.object({
   full_name: z.string().trim().min(2, "Full name must be at least 2 characters."),
   college_email: z.string().trim().email("Enter a valid college email."),
   password: z.string().min(8, "Password must be at least 8 characters."),
   confirm_password: z.string(),
-  squad: z.enum(["138", "139", "183"], { message: "Select your squad." }),
+  squad: z.enum(ALLOWED_SQUADS as unknown as [string, ...string[]], { message: "Select your squad." }),
 }).refine((data) => data.password === data.confirm_password, {
   message: "Passwords do not match.",
   path: ["confirm_password"],

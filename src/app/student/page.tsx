@@ -18,26 +18,39 @@ export default function StudentPhonePage() {
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  const load = async () => {
-    setLoading(true);
-    setError("");
+  const load = async (silent = false) => {
+    if (!silent) { setLoading(true); setError(""); }
     try {
       const active = await phoneApi.active();
       setProfile(active.profile);
-      const nextSession = active.sessions[0];
+      const nextSession = active.sessions?.[0];
       if (!nextSession) { setSession(undefined); return; }
       setSession(nextSession);
       const current = await phoneApi.get(nextSession.id);
       setStatus((current as { status?: { current_status?: PhoneStatus } }).status?.current_status ?? "not_reported");
-    } catch (loadError) { setError(loadError instanceof Error ? loadError.message : "Could not load your phone session."); }
-    finally { setLoading(false); }
+    } catch (loadError) {
+      const raw = loadError instanceof Error ? loadError.message : "Could not load your phone session.";
+      let message = raw;
+      if (raw.toLowerCase().includes("profile")) message = "Your profile has not been created yet. Please contact your mentor.";
+      else if (raw.toLowerCase().includes("squad")) message = "Your squad has not been assigned yet. Please contact your mentor.";
+      else if (raw.toLowerCase().includes("failed to fetch") || raw.toLowerCase().includes("network")) message = "Could not reach the server. Please try again.";
+      setError(message);
+    } finally {
+      if (!silent) setLoading(false);
+    }
   };
-  useEffect(() => { const timer = window.setTimeout(() => { void load(); }, 0); return () => window.clearTimeout(timer); }, []);
+  useEffect(() => { const timer = window.setTimeout(() => { void load(); }, 0); const refresh = window.setInterval(() => { void load(true); }, 10000); return () => { window.clearTimeout(timer); window.clearInterval(refresh); }; }, []);
 
   const update = async (nextStatus: "submitted" | "taken_back" | "not_submitted") => {
-    if (!session) return;
+    if (!session || loading || busy) return;
     setBusy(true); setError(""); setMessage("");
-    try { await phoneApi.updateStatus(session.id, nextStatus, reason || undefined); setStatus(nextStatus); setReason(""); setMessage(nextStatus === "submitted" ? "Phone submission recorded." : nextStatus === "taken_back" ? "Phone pickup recorded." : "Non-submission recorded."); }
+    try {
+      const result = await phoneApi.updateStatus(session.id, nextStatus, reason || undefined) as { current_status?: PhoneStatus } | null;
+      const confirmed = result?.current_status ?? nextStatus;
+      setStatus(confirmed);
+      setReason("");
+      setMessage(confirmed === "submitted" ? "Phone submission recorded." : confirmed === "taken_back" ? "Phone pickup recorded." : "Non-submission recorded.");
+    }
     catch (updateError) { setError(updateError instanceof Error ? updateError.message : "Status change was rejected."); }
     finally { setBusy(false); }
   };

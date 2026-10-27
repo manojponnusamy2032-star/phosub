@@ -4,6 +4,7 @@ import { FormEvent, useState } from "react";
 import { Eye, EyeOff, LockKeyhole, Phone, User, GraduationCap } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
+import { ALLOWED_SQUADS } from "@/lib/squads";
 
 type Mode = "signin" | "signup";
 
@@ -48,7 +49,7 @@ export default function StudentAuthPage() {
         if (!college_email.trim()) { setError("College email is required."); return; }
         if (password.length < 8) { setError("Password must be at least 8 characters."); return; }
         if (password !== confirm_password) { setError("Passwords do not match."); return; }
-        if (!["138","139","183"].includes(squad)) { setError("Select your squad."); return; }
+        if (!ALLOWED_SQUADS.includes(squad as (typeof ALLOWED_SQUADS)[number])) { setError("Select your squad."); return; }
 
         const res = await fetch("/api/student-signup", {
           method: "POST",

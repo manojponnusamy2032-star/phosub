@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useState } from "react";
 import { Eye, EyeOff, GraduationCap, LockKeyhole, Phone, QrCode, User } from "lucide-react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { useRouter } from "next/navigation";
+import { ALLOWED_SQUADS } from "@/lib/squads";
 
 type Mode = "signin" | "signup";
 type Role = "mentor" | "student";
@@ -66,7 +67,7 @@ export default function LoginPage() {
         if (!college_email.trim()) { setError("College email is required."); return; }
         if (password.length < 8) { setError("Password must be at least 8 characters."); return; }
         if (password !== confirm_password) { setError("Passwords do not match."); return; }
-        if (!["138","139","183"].includes(squad)) { setError("Select your squad."); return; }
+        if (!ALLOWED_SQUADS.includes(squad as (typeof ALLOWED_SQUADS)[number])) { setError("Select your squad."); return; }
 
         const endpoint = role === "mentor" ? "/api/mentor-signup" : "/api/student-signup";
         const res = await fetch(endpoint, {
@@ -105,7 +106,7 @@ export default function LoginPage() {
         </div>
 
         <div className="mt-6 grid grid-cols-2 gap-2 rounded-lg border border-[var(--line)] bg-[var(--paper)] p-1">
-          <button type="button" onClick={() => { setRole("mentor"); setError(""); }} className={`rounded px-3 py-2 sans text-sm font-bold ${role === "mentor" ? "bg-[var(--ink)] text-white" : "text-[var(--ink)]"}`}>Mentor</button>
+          <button type="button" onClick={() => { setRole("mentor"); setMode("signin"); setError(""); }} className={`rounded px-3 py-2 sans text-sm font-bold ${role === "mentor" ? "bg-[var(--ink)] text-white" : "text-[var(--ink)]"}`}>Mentor</button>
           <button type="button" onClick={() => { setRole("student"); setError(""); }} className={`rounded px-3 py-2 sans text-sm font-bold ${role === "student" ? "bg-[var(--ink)] text-white" : "text-[var(--ink)]"}`}>Student</button>
         </div>
 
@@ -177,7 +178,7 @@ export default function LoginPage() {
 
         <p className="mt-6 text-center sans text-sm">
           {mode === "signin"
-            ? <span>Don&apos;t have an account? <button type="button" onClick={() => { setMode("signup"); setError(""); }} className="font-bold text-[var(--ink)] underline underline-offset-4">Create one</button>. <button type="button" onClick={() => router.replace("/forgot-password")} className="font-bold text-[var(--ink)] underline underline-offset-4">Forgot password?</button></span>
+            ? (isStudent ? <span>Don&apos;t have an account? <button type="button" onClick={() => { setMode("signup"); setError(""); }} className="font-bold text-[var(--ink)] underline underline-offset-4">Create one</button>. <button type="button" onClick={() => router.replace("/forgot-password")} className="font-bold text-[var(--ink)] underline underline-offset-4">Forgot password?</button></span> : <span><button type="button" onClick={() => router.replace("/forgot-password")} className="font-bold text-[var(--ink)] underline underline-offset-4">Forgot password?</button></span>)
             : <span>Already have an account? <button type="button" onClick={() => { setMode("signin"); setError(""); }} className="font-bold text-[var(--ink)] underline underline-offset-4">Sign in</button>.</span>}
         </p>
         {isStudent && <p className="mt-3 text-center sans text-xs text-[var(--muted)]">Problems signing in? Ask your mentor to provision your account.</p>}

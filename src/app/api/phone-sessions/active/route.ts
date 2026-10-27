@@ -10,7 +10,7 @@ export async function GET() {
     const { user, profile } = await requireStudent();
     const studentProfile = profile as { full_name?: string; college_email?: string; squad?: string | null } | null;
     const squad = studentProfile?.squad ?? null;
-    if (!squad) throw new Response("Student squad required", { status: 403 });
+    if (!squad) throw new Response("Your squad has not been assigned yet. Please contact your mentor.", { status: 403 });
 
     const admin = createSupabaseAdminClient();
 

@@ -1,7 +1,7 @@
 "use client";
 /* eslint-disable @next/next/no-html-link-for-pages */
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Check, Clock3, Phone, Plus, RefreshCw, Square, Users } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { phoneApi } from "@/lib/phone-api";
@@ -22,40 +22,50 @@ export default function MentorPhonePage() {
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  const [isLoading, setIsLoading] = useState(false);
+  const loadSeq = useRef(0);
   const isLoadingRef = useRef(false);
 
-  async function load({ initial = false }: { initial?: boolean } = {}) {
+  const selectedIdRef = useRef<string | undefined>(selected?.id);
+  useEffect(() => { selectedIdRef.current = selected?.id; }, [selected?.id]);
+
+  const load = useCallback(async ({ initial = false, selectId }: { initial?: boolean; selectId?: string } = {}) => {
     if (isLoadingRef.current) return;
+    const seq = ++loadSeq.current;
     isLoadingRef.current = true;
-    setIsLoading(true);
     if (initial) setLoading(true);
     try {
       const list = await phoneApi.list();
+      if (seq !== loadSeq.current) return;
       setSessions(list);
       setError("");
       if (initial) setLoading(false);
-      const active = selected ? list.find((item) => item.id === selected.id) : list.find((item) => item.status === "active") ?? list[0];
-      if (!active) return;
-      const detail = await phoneApi.get(active.id);
+      const targetId = selectId ?? selectedIdRef.current;
+      const target = targetId
+        ? list.find((item) => item.id === targetId)
+        : (list.find((item) => item.status === "active") ?? list[0]);
+      if (!target) return;
+      const detail = await phoneApi.get(target.id);
+      if (seq !== loadSeq.current) return;
       setSelected(detail.session);
       setStudents(detail.students);
-      setEvents(await phoneApi.events(active.id));
+      const ev = await phoneApi.events(target.id);
+      if (seq !== loadSeq.current) return;
+      setEvents(ev);
     } catch (loadError) {
+      if (seq !== loadSeq.current) return;
       if (initial) setLoading(false);
       const message = loadError instanceof Error ? loadError.message : "Could not load phone sessions.";
       setError(message);
     } finally {
       isLoadingRef.current = false;
-      setIsLoading(false);
     }
-  }
+  }, []);
 
   useEffect(() => {
     const firstLoad = window.setTimeout(() => { void load({ initial: true }); }, 0);
     const refresh = window.setInterval(() => { void load({ initial: false }); }, 5000);
     return () => { window.clearTimeout(firstLoad); window.clearInterval(refresh); };
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function create() {
     setBusy(true);
@@ -63,8 +73,21 @@ export default function MentorPhonePage() {
     setFieldErrors({});
     try {
       const session = await phoneApi.create({ title, classGroup, classroom });
-      setTitle(""); setClassGroup(""); setClassroom(""); setSelected(session);
-      void load();
+      setTitle(""); setClassGroup(""); setClassroom("");
+      setSessions((prev) => [session, ...prev.filter((s) => s.id !== session.id)]);
+      setSelected(session);
+      setStudents([]);
+      setEvents([]);
+      // Refresh details and list.
+      try {
+        const detail = await phoneApi.get(session.id);
+        setSelected(detail.session);
+        setStudents(detail.students);
+        setEvents(await phoneApi.events(session.id));
+      } catch {
+        // Keep created session selected even if detail fetch fails.
+      }
+      void load({ selectId: session.id });
     } catch (createError) {
       const err = createError as Error & { issues?: unknown };
       if (err.issues) {
@@ -84,8 +107,12 @@ export default function MentorPhonePage() {
   async function end() {
     if (!selected || !window.confirm("End this phone session? Students will no longer be able to change status.")) return;
     setBusy(true);
-    try { await phoneApi.end(selected.id); void load(); }
-    catch (endError) { setError(endError instanceof Error ? endError.message : "Could not end session."); }
+    try {
+      const ended = await phoneApi.end(selected.id);
+      setSelected(ended);
+      setSessions((prev) => prev.map((s) => (s.id === ended.id ? ended : s)));
+      await load({ selectId: ended.id });
+    } catch (endError) { setError(endError instanceof Error ? endError.message : "Could not end session."); }
     finally { setBusy(false); }
   }
 
