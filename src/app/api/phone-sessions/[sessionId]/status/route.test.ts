@@ -7,6 +7,17 @@ async function loadRoute() {
   return await import("./route");
 }
 
+function makeSupabase(rpc: (...args: never[]) => unknown = vi.fn(() => Promise.resolve({ data: { current_status: "submitted", updated_at: "2026-01-01T00:00:00Z" }, error: null }))) {
+  return {
+    from: vi.fn(() => ({
+      select: vi.fn(() => ({
+        eq: vi.fn(() => ({ maybeSingle: vi.fn(() => Promise.resolve({ data: { class_group: "138", status: "active" }, error: null })) })),
+      })),
+    })),
+    rpc,
+  };
+}
+
 describe("phone status route", () => {
   beforeEach(() => vi.clearAllMocks());
 
@@ -18,7 +29,7 @@ describe("phone status route", () => {
   });
 
   it("rejects invalid status", async () => {
-    const supabase = { rpc: vi.fn() };
+    const supabase = makeSupabase(vi.fn());
     requireStudent.mockResolvedValue({ supabase, user: { id: "s1" }, profile: { squad: "138" } });
     const { POST } = await loadRoute();
     const res = await POST(new Request("http://localhost/api/phone-sessions/s1/status", { method: "POST", body: JSON.stringify({ status: "bogus" }) }), { params: Promise.resolve({ sessionId: "s1" }) });
@@ -27,7 +38,7 @@ describe("phone status route", () => {
 
   it("rejects taken_back without a reason", async () => {
     const rpc = vi.fn();
-    const supabase = { rpc };
+    const supabase = makeSupabase(rpc);
     requireStudent.mockResolvedValue({ supabase, user: { id: "s1" }, profile: { squad: "138" } });
     const { POST } = await loadRoute();
     const res = await POST(new Request("http://localhost/api/phone-sessions/s1/status", { method: "POST", body: JSON.stringify({ status: "taken_back" }) }), { params: Promise.resolve({ sessionId: "s1" }) });
@@ -37,7 +48,7 @@ describe("phone status route", () => {
 
   it("returns rpc result on success", async () => {
     const rpc = vi.fn(() => Promise.resolve({ data: { current_status: "submitted", updated_at: "2026-01-01T00:00:00Z" }, error: null }));
-    const supabase = { rpc };
+    const supabase = makeSupabase(rpc);
     requireStudent.mockResolvedValue({ supabase, user: { id: "s1" }, profile: { squad: "138" } });
     const { POST } = await loadRoute();
     const res = await POST(new Request("http://localhost/api/phone-sessions/s1/status", { method: "POST", body: JSON.stringify({ status: "submitted" }) }), { params: Promise.resolve({ sessionId: "s1" }) });
@@ -48,7 +59,7 @@ describe("phone status route", () => {
 
   it("returns taken_back when a reason is provided", async () => {
     const rpc = vi.fn(() => Promise.resolve({ data: { current_status: "taken_back", updated_at: "2026-01-01T00:01:00Z" }, error: null }));
-    const supabase = { rpc };
+    const supabase = makeSupabase(rpc);
     requireStudent.mockResolvedValue({ supabase, user: { id: "s1" }, profile: { squad: "138" } });
     const { POST } = await loadRoute();
     const res = await POST(new Request("http://localhost/api/phone-sessions/s1/status", { method: "POST", body: JSON.stringify({ status: "taken_back", reason: "Needed for lab" }) }), { params: Promise.resolve({ sessionId: "s1" }) });
@@ -60,7 +71,7 @@ describe("phone status route", () => {
 
   it("allows submitting again after taken back", async () => {
     const rpc = vi.fn(() => Promise.resolve({ data: { current_status: "submitted", updated_at: "2026-01-01T00:02:00Z" }, error: null }));
-    const supabase = { rpc };
+    const supabase = makeSupabase(rpc);
     requireStudent.mockResolvedValue({ supabase, user: { id: "s1" }, profile: { squad: "138" } });
     const { POST } = await loadRoute();
     const res = await POST(new Request("http://localhost/api/phone-sessions/s1/status", { method: "POST", body: JSON.stringify({ status: "submitted" }) }), { params: Promise.resolve({ sessionId: "s1" }) });
@@ -71,7 +82,7 @@ describe("phone status route", () => {
 
   it("rejects unauthorized students", async () => {
     const rpc = vi.fn(() => Promise.resolve({ data: null, error: { message: "Student is not eligible for this session" } }));
-    const supabase = { rpc };
+    const supabase = makeSupabase(rpc);
     requireStudent.mockResolvedValue({ supabase, user: { id: "s1" }, profile: { squad: "138" } });
     const { POST } = await loadRoute();
     const res = await POST(new Request("http://localhost/api/phone-sessions/s1/status", { method: "POST", body: JSON.stringify({ status: "submitted" }) }), { params: Promise.resolve({ sessionId: "s1" }) });
@@ -80,10 +91,19 @@ describe("phone status route", () => {
 
   it("rejects changes after a session ends", async () => {
     const rpc = vi.fn(() => Promise.resolve({ data: null, error: { message: "Session is not active" } }));
-    const supabase = { rpc };
+    const supabase = makeSupabase(rpc);
     requireStudent.mockResolvedValue({ supabase, user: { id: "s1" }, profile: { squad: "138" } });
     const { POST } = await loadRoute();
     const res = await POST(new Request("http://localhost/api/phone-sessions/s1/status", { method: "POST", body: JSON.stringify({ status: "submitted" }) }), { params: Promise.resolve({ sessionId: "s1" }) });
     expect(res.status).toBe(409);
+  });
+
+  it("rejects status updates for a different squad", async () => {
+    const rpc = vi.fn();
+    requireStudent.mockResolvedValue({ supabase: makeSupabase(rpc), user: { id: "s1" }, profile: { squad: "139" } });
+    const { POST } = await loadRoute();
+    const res = await POST(new Request("http://localhost/api/phone-sessions/s1/status", { method: "POST", body: JSON.stringify({ status: "submitted" }) }), { params: Promise.resolve({ sessionId: "s1" }) });
+    expect(res.status).toBe(403);
+    expect(rpc).not.toHaveBeenCalled();
   });
 });

@@ -19,6 +19,23 @@ describe("phone session detail route", () => {
     expect(res.status).toBe(401);
   });
 
+  it("rejects students from a different squad", async () => {
+    const from = vi.fn((table: string) => {
+      if (table === "phone_sessions") {
+        return { select: vi.fn(() => ({ eq: vi.fn(() => ({ eq: vi.fn(() => ({ single: vi.fn(async () => ({ data: { id: "s1", class_group: "138", status: "active" }, error: null })) })) })) })) };
+      }
+      return {};
+    });
+    requireMentor.mockRejectedValue(new Response("Mentor access required", { status: 403 }));
+    requireStudent.mockResolvedValue({ supabase: { from }, user: { id: "stu1" }, profile: { squad: "139" } });
+
+    const { GET } = await loadRoute();
+    const res = await GET(new Request("http://localhost/x"), { params: Promise.resolve({ sessionId: "s1" }) });
+
+    expect(res.status).toBe(403);
+    expect(from).not.toHaveBeenCalledWith("phone_session_students");
+  });
+
   it("returns updated status and counts for a mentor", async () => {
     const sessionRow = { id: "s1", mentor_id: "m1", title: "T", class_group: "138", classroom: null, status: "active", started_at: "2026-01-01T00:00:00Z", ended_at: null };
     const enrollments = [

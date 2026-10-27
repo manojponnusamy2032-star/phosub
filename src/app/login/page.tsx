@@ -35,6 +35,11 @@ export default function LoginPage() {
       if (mode === "signin") {
         const email = String(form.get("email")).trim().toLowerCase();
         const password = String(form.get("password"));
+        const squad = role === "student" ? String(form.get("squad")) : "";
+        if (role === "student" && !ALLOWED_SQUADS.includes(squad as (typeof ALLOWED_SQUADS)[number])) {
+          setError("Select your assigned squad to continue.");
+          return;
+        }
         const { data, error: signInError } = await client.auth.signInWithPassword({ email, password });
         if (signInError) { setError(signInError.message || "Sign in failed. Check your college email and password."); return; }
         if (role === "mentor") {
@@ -47,10 +52,20 @@ export default function LoginPage() {
           }
           router.replace("/");
         } else {
-          const { data: profile } = await client.from("student_profiles").select("user_id").eq("user_id", data.user.id).single();
+          const { data: profile } = await client.from("student_profiles").select("user_id, squad").eq("user_id", data.user.id).single();
           if (!profile) {
             await client.auth.signOut();
             setError("This account is not a student account. Contact your mentor.");
+            return;
+          }
+          if (!profile.squad) {
+            await client.auth.signOut();
+            setError("Your squad has not been assigned yet. Contact your mentor.");
+            return;
+          }
+          if (profile.squad !== squad) {
+            await client.auth.signOut();
+            setError("That selection does not match your assigned squad. Contact your mentor if you need help.");
             return;
           }
           router.replace("/student");
@@ -126,7 +141,10 @@ export default function LoginPage() {
             </>
           )}
           {mode === "signin" && (
-            <label className="block flex items-center gap-2"><span className="sans text-sm font-bold">College email</span><User size={14} className="text-[var(--muted)]" /><input name="email" className="input mt-2 flex-1" type="email" required autoComplete="email" placeholder={isStudent ? "student@college.edu" : "teacher@college.edu"} /></label>
+            <>
+              {isStudent && <label className="block"><span className="sans text-sm font-bold">Squad</span><select name="squad" className="input mt-2 w-full" required defaultValue=""><option value="" disabled>Select your assigned squad</option>{ALLOWED_SQUADS.map((squad) => <option key={squad} value={squad}>Squad {squad}</option>)}</select></label>}
+              <label className="block flex items-center gap-2"><span className="sans text-sm font-bold">College email</span><User size={14} className="text-[var(--muted)]" /><input name="email" className="input mt-2 flex-1" type="email" required autoComplete="email" placeholder={isStudent ? "student@college.edu" : "teacher@college.edu"} /></label>
+            </>
           )}
           <label className="block relative">
             <span className="sans text-sm font-bold">Password</span>

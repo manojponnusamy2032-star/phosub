@@ -50,9 +50,11 @@ export async function GET(_request: Request, { params }: { params: Promise<{ ses
       return NextResponse.json({ session: result, students: statuses });
     } catch (mentorError) {
       if (!(mentorError instanceof Response)) throw mentorError;
-      const { supabase, user } = await requireStudent();
+      const { supabase, user, profile } = await requireStudent();
       const { data: session, error } = await supabase.from("phone_sessions").select("*").eq("id", sessionId).eq("status", "active").single();
       if (error || !session) return NextResponse.json({ error: "Active session not found" }, { status: 404 });
+      const studentSquad = (profile as { squad?: string | null } | null)?.squad;
+      if (!studentSquad || studentSquad !== session.class_group) return NextResponse.json({ error: "This session is not available for your squad." }, { status: 403 });
       const { data: enrollment } = await supabase.from("phone_session_students").select("student_id").eq("session_id", sessionId).eq("student_id", user.id).single();
       if (!enrollment) return NextResponse.json({ error: "You are not eligible for this session" }, { status: 403 });
       const { data: status } = await supabase.from("phone_statuses").select("current_status, current_reason, updated_at").eq("session_id", sessionId).eq("student_id", user.id).maybeSingle();

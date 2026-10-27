@@ -4,6 +4,7 @@ import { FormEvent, useState } from "react";
 import { LockKeyhole, Sparkles } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
+import { ALLOWED_SQUADS } from "@/lib/squads";
 
 export default function StudentWelcomePage() {
   const router = useRouter();
@@ -16,12 +17,19 @@ export default function StudentWelcomePage() {
     const form = new FormData(event.currentTarget);
     try {
       const client = createSupabaseBrowserClient();
+      const squad = String(form.get("squad"));
+      if (!ALLOWED_SQUADS.includes(squad as (typeof ALLOWED_SQUADS)[number])) { setError("Select your assigned squad to continue."); return; }
       const { data, error: signInError } = await client.auth.signInWithPassword({ email: String(form.get("email")), password: String(form.get("password")) });
       if (signInError) { setError(signInError.message || "Sign in failed. Check your college email and password."); return; }
-      const { data: profile } = await client.from("student_profiles").select("user_id").eq("user_id", data.user.id).single();
+      const { data: profile } = await client.from("student_profiles").select("user_id, squad").eq("user_id", data.user.id).single();
       if (!profile) {
         await client.auth.signOut();
         setError("This account is not a student account. Contact your mentor.");
+        return;
+      }
+      if (profile.squad !== squad) {
+        await client.auth.signOut();
+        setError(profile.squad ? "That selection does not match your assigned squad." : "Your squad has not been assigned yet. Contact your mentor.");
         return;
       }
       router.replace("/student");
@@ -43,6 +51,7 @@ export default function StudentWelcomePage() {
         <p className="mt-8 text-2xl font-bold">Welcome to your first session.</p>
         <p className="mt-2 sans text-sm leading-6 text-[var(--muted)]">Your mentor created your account. Sign in with the credentials they shared to check in your phone status.</p>
         <form onSubmit={submit} className="mt-6 space-y-4">
+          <label className="block"><span className="sans text-sm font-bold">Squad</span><select name="squad" className="input mt-2 w-full" required defaultValue=""><option value="" disabled>Select your assigned squad</option>{ALLOWED_SQUADS.map((squad) => <option key={squad} value={squad}>Squad {squad}</option>)}</select></label>
           <label className="block"><span className="sans text-sm font-bold">College email</span><input name="email" className="input mt-2" type="email" required autoComplete="email" placeholder="student@college.edu" /></label>
           <label className="block"><span className="sans text-sm font-bold">Password</span><input name="password" className="input mt-2" type="password" required autoComplete="current-password" placeholder="••••••••" /></label>
           {error && <p role="alert" className="sans text-sm text-[#b9502b]">{error}</p>}
