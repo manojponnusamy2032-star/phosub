@@ -23,71 +23,91 @@ export default function MentorPhonePage() {
   const [loading, setLoading] = useState(true);
 
   const loadSeq = useRef(0);
-  const isLoadingRef = useRef(false);
+  const inFlightRef = useRef(false);
+  const mountedRef = useRef(true);
+  const selectedIdRef = useRef<string | undefined>(undefined);
 
-  const selectedIdRef = useRef<string | undefined>(selected?.id);
-  useEffect(() => { selectedIdRef.current = selected?.id; }, [selected?.id]);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
 
-  const load = useCallback(async ({ initial = false, selectId }: { initial?: boolean; selectId?: string } = {}) => {
-    if (isLoadingRef.current) return;
+  useEffect(() => {
+    selectedIdRef.current = selected?.id;
+  }, [selected?.id]);
+
+  const load = useCallback(async ({ initial = false, targetId }: { initial?: boolean; targetId?: string } = {}) => {
+    if (inFlightRef.current) return;
     const seq = ++loadSeq.current;
-    isLoadingRef.current = true;
+    inFlightRef.current = true;
     if (initial) setLoading(true);
     try {
       const list = await phoneApi.list();
-      if (seq !== loadSeq.current) return;
+      if (!mountedRef.current || seq !== loadSeq.current) return;
       setSessions(list);
       setError("");
-      if (initial) setLoading(false);
-      const targetId = selectId ?? selectedIdRef.current;
-      const target = targetId
-        ? list.find((item) => item.id === targetId)
+      const wantedId = targetId ?? selectedIdRef.current;
+      const target = wantedId
+        ? list.find((item) => item.id === wantedId)
         : (list.find((item) => item.status === "active") ?? list[0]);
-      if (!target) return;
-      selectedIdRef.current = target.id;
+      if (!target) {
+        if (initial && mountedRef.current) setLoading(false);
+        return;
+      }
+      if (selectedIdRef.current !== target.id) selectedIdRef.current = target.id;
       const detail = await phoneApi.get(target.id);
-      if (seq !== loadSeq.current || selectedIdRef.current !== target.id) return;
+      if (!mountedRef.current || seq !== loadSeq.current || selectedIdRef.current !== target.id) return;
       setSelected(detail.session);
       setStudents(detail.students);
       const ev = await phoneApi.events(target.id);
-      if (seq !== loadSeq.current || selectedIdRef.current !== target.id) return;
+      if (!mountedRef.current || seq !== loadSeq.current || selectedIdRef.current !== target.id) return;
       setEvents(ev);
     } catch (loadError) {
-      if (seq !== loadSeq.current) return;
+      if (!mountedRef.current || seq !== loadSeq.current) return;
       if (initial) setLoading(false);
       const message = loadError instanceof Error ? loadError.message : "Could not load phone sessions.";
       setError(message);
     } finally {
-      isLoadingRef.current = false;
+      if (mountedRef.current && initial) setLoading(false);
+      inFlightRef.current = false;
     }
   }, []);
 
   const selectSession = useCallback(async (id: string) => {
-    if (isLoadingRef.current) return;
+    if (inFlightRef.current) return;
     const seq = ++loadSeq.current;
-    isLoadingRef.current = true;
+    inFlightRef.current = true;
     selectedIdRef.current = id;
     try {
       const detail = await phoneApi.get(id);
-      if (seq !== loadSeq.current || selectedIdRef.current !== id) return;
+      if (!mountedRef.current || seq !== loadSeq.current || selectedIdRef.current !== id) return;
       setSelected(detail.session);
       setStudents(detail.students);
       const ev = await phoneApi.events(id);
-      if (seq !== loadSeq.current || selectedIdRef.current !== id) return;
+      if (!mountedRef.current || seq !== loadSeq.current || selectedIdRef.current !== id) return;
       setEvents(ev);
     } catch (selectError) {
-      if (seq !== loadSeq.current) return;
+      if (!mountedRef.current || seq !== loadSeq.current) return;
       setError(selectError instanceof Error ? selectError.message : "Could not load phone session.");
     } finally {
-      isLoadingRef.current = false;
+      inFlightRef.current = false;
     }
   }, []);
 
   useEffect(() => {
-    const firstLoad = window.setTimeout(() => { void load({ initial: true }); }, 0);
-    const refresh = window.setInterval(() => { void load({ initial: false }); }, 5000);
-    return () => { window.clearTimeout(firstLoad); window.clearInterval(refresh); };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    let cancelled = false;
+    const initialTimer = window.setTimeout(() => {
+      if (!cancelled) void load({ initial: true });
+    }, 0);
+    const refreshTimer = window.setInterval(() => {
+      if (!cancelled) void load({ initial: false });
+    }, 10000);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(initialTimer);
+      window.clearInterval(refreshTimer);
+    };
+  }, [load]);
 
   async function create() {
     setBusy(true);
@@ -95,35 +115,42 @@ export default function MentorPhonePage() {
     setFieldErrors({});
     try {
       const session = await phoneApi.create({ title, classGroup, classroom });
+      if (!mountedRef.current) return;
       setTitle(""); setClassGroup(""); setClassroom("");
       setSessions((prev) => [session, ...prev.filter((s) => s.id !== session.id)]);
+      selectedIdRef.current = session.id;
       setSelected(session);
       setStudents([]);
       setEvents([]);
-      // Refresh details and list.
+      const seq = ++loadSeq.current;
       try {
         const detail = await phoneApi.get(session.id);
+        if (!mountedRef.current || seq !== loadSeq.current || selectedIdRef.current !== session.id) return;
         setSelected(detail.session);
         setStudents(detail.students);
-        setEvents(await phoneApi.events(session.id));
+        const ev = await phoneApi.events(session.id);
+        if (!mountedRef.current || seq !== loadSeq.current || selectedIdRef.current !== session.id) return;
+        setEvents(ev);
       } catch {
         // Keep created session selected even if detail fetch fails.
       }
-      void load({ selectId: session.id });
     } catch (createError) {
+      if (!mountedRef.current) return;
       const err = createError as Error & { issues?: unknown };
       if (err.issues) {
-        const fieldErrors: Record<string, string> = {};
+        const nextFieldErrors: Record<string, string> = {};
         const flat = err.issues as { fieldErrors?: Record<string, { message: string }[]> };
         Object.entries(flat.fieldErrors ?? {}).forEach(([key, val]) => {
-          fieldErrors[key] = val?.[0]?.message ?? "Invalid";
+          nextFieldErrors[key] = val?.[0]?.message ?? "Invalid";
         });
-        setFieldErrors(fieldErrors);
-        setError(Object.values(fieldErrors).join(" "));
+        setFieldErrors(nextFieldErrors);
+        setError(Object.values(nextFieldErrors).join(" "));
       } else {
         setError(err instanceof Error ? err.message : "Could not start session.");
       }
-    } finally { setBusy(false); }
+    } finally {
+      if (mountedRef.current) setBusy(false);
+    }
   }
 
   async function end() {
@@ -131,11 +158,27 @@ export default function MentorPhonePage() {
     setBusy(true);
     try {
       const ended = await phoneApi.end(selected.id);
+      if (!mountedRef.current) return;
       setSelected(ended);
       setSessions((prev) => prev.map((s) => (s.id === ended.id ? ended : s)));
-      await load({ selectId: ended.id });
-    } catch (endError) { setError(endError instanceof Error ? endError.message : "Could not end session."); }
-    finally { setBusy(false); }
+      const seq = ++loadSeq.current;
+      try {
+        const detail = await phoneApi.get(ended.id);
+        if (!mountedRef.current || seq !== loadSeq.current || selectedIdRef.current !== ended.id) return;
+        setSelected(detail.session);
+        setStudents(detail.students);
+        const ev = await phoneApi.events(ended.id);
+        if (!mountedRef.current || seq !== loadSeq.current || selectedIdRef.current !== ended.id) return;
+        setEvents(ev);
+      } catch {
+        // Keep ended session visible even if refresh fails.
+      }
+    } catch (endError) {
+      if (!mountedRef.current) return;
+      setError(endError instanceof Error ? endError.message : "Could not end session.");
+    } finally {
+      if (mountedRef.current) setBusy(false);
+    }
   }
 
   const summaryCards: SummaryCard[] = selected ? [["Eligible", selected.totalEligible, Users], ["Submitted", selected.submitted, Check], ["Taken back", selected.takenBack, Phone], ["Not reported", selected.notReported, Clock3]] : [];

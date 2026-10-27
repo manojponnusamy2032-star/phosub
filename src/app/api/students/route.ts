@@ -22,7 +22,8 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    await requireMentor();
+    const { profile: mentorProfile } = await requireMentor();
+    const mentorSquad = (mentorProfile as { squad?: string | null } | null)?.squad ?? null;
     const parsed = studentSchema.safeParse(await request.json());
     if (!parsed.success) return NextResponse.json({ error: "Invalid student details", issues: parsed.error.flatten() }, { status: 400 });
     const admin = createSupabaseAdminClient();
@@ -37,11 +38,12 @@ export async function POST(request: Request) {
       user_id: created.user.id,
       full_name: parsed.data.full_name,
       college_email: parsed.data.college_email,
+      squad: mentorSquad,
     });
     if (profileError) {
       await admin.auth.admin.deleteUser(created.user.id).catch(() => undefined);
       return NextResponse.json({ error: profileError.message ?? "Could not create student profile." }, { status: 400 });
     }
-    return NextResponse.json({ id: created.user.id, email: parsed.data.college_email, full_name: parsed.data.full_name }, { status: 201 });
+    return NextResponse.json({ id: created.user.id, email: parsed.data.college_email, full_name: parsed.data.full_name, squad: mentorSquad }, { status: 201 });
   } catch (error) { return errorResponse(error); }
 }
