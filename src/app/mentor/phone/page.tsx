@@ -50,6 +50,7 @@ export default function MentorPhonePage() {
       const list = await phoneApi.list();
       if (!mountedRef.current || seq !== loadSeq.current) return;
       setSessions(list);
+      setLoading(false);
       setError("");
       const wantedId = targetId ?? pendingTargetRef.current ?? selectedIdRef.current;
       pendingTargetRef.current = undefined;
@@ -84,6 +85,11 @@ export default function MentorPhonePage() {
     }
   };
 
+  const loadRef = useRef(load);
+  useEffect(() => {
+    loadRef.current = load;
+  });
+
   const selectSession = async (id: string) => {
     if (inFlightRef.current) {
       pendingTargetRef.current = id;
@@ -116,17 +122,17 @@ export default function MentorPhonePage() {
   useEffect(() => {
     let cancelled = false;
     const initialTimer = window.setTimeout(() => {
-      if (!cancelled) void load({ initial: true });
+      if (!cancelled) void loadRef.current({ initial: true });
     }, 0);
     const refreshTimer = window.setInterval(() => {
-      if (!cancelled) void load({ initial: false });
+      if (!cancelled) void loadRef.current({ initial: false });
     }, 10000);
     return () => {
       cancelled = true;
       window.clearTimeout(initialTimer);
       window.clearInterval(refreshTimer);
     };
-  }, [load]);
+  }, []);
 
   async function create() {
     setBusy(true);
